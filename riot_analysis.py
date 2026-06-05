@@ -88,6 +88,8 @@ class AnalysisConfig:
     max_hour_limit: int = 5000
     min_period_h: float = 6.0
     max_period_h: float = 48.0
+    period_step_h: float = 1.0
+    player_period_step_h: float = 1.0
     n_freq: int = 500
     player_n_freq: int = 2000
     phase_alpha: float = 0.05
@@ -448,21 +450,25 @@ def filter_hourly_window(hourly: pd.DataFrame, max_hour_limit: int) -> pd.DataFr
 def period_grid(config: AnalysisConfig, *, player: bool = False) -> tuple[np.ndarray, np.ndarray]:
     """Return frequency and period arrays.
 
-    The grid is evenly spaced in frequency (as required for Lomb-Scargle) but is
-    anchored so that exactly 24 h (f = 1/24) is a grid node. This lets a true
-    circadian peak be reported at 24.00 h instead of snapping to a neighbouring
-    bin. The spacing and ~6-48 h span match a plain linspace of `n_freq` points;
-    the node count may differ by one.
+    The grid is evenly spaced in period hours (default 1 h bins over ~6-48 h).
+    This keeps reporting interpretable and avoids overly fine period bins.
     """
 
-    n_freq = config.player_n_freq if player else config.n_freq
-    f_min = 1.0 / config.max_period_h
-    f_max = 1.0 / config.min_period_h
-    f_anchor = 1.0 / 24.0
-    df = (f_max - f_min) / (n_freq - 1)
-    k_low = int(np.floor((f_anchor - f_min) / df))
-    k_high = int(np.floor((f_max - f_anchor) / df))
-    frequency = f_anchor + np.arange(-k_low, k_high + 1) * df
+    period_step_h = config.player_period_step_h if player else config.period_step_h
+    if period_step_h <= 0:
+        raise ValueError("period_step_h must be > 0")
+
+    period = np.arange(
+        config.min_period_h,
+        config.max_period_h + (0.5 * period_step_h),
+        period_step_h,
+        dtype=float,
+    )
+    period = period[period > 0]
+    if len(period) == 0:
+        raise ValueError("Period grid is empty; check min/max period bounds.")
+
+    frequency = 1.0 / period
     return frequency, 1.0 / frequency
 
 
