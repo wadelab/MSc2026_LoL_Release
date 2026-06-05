@@ -355,6 +355,35 @@ def sort_metric_table(table: pd.DataFrame) -> pd.DataFrame:
     return sorted_table.reset_index(drop=True)
 
 
+def drop_period_outliers(periodograms: pd.DataFrame, mad_z_threshold: float = 3.5) -> pd.DataFrame:
+    """Drop per-server periodogram peaks that are robust outliers within a metric.
+
+    Uses a median/MAD modified z-score so a couple of aberrant servers (e.g. the
+    DeltaMMR peaks for the public-beta server and the lone double-period server)
+    do not distort the grand mean or the by-server scatter. Metrics whose peaks
+    are effectively constant (MAD == 0) are left untouched.
+    """
+
+    if periodograms.empty or "best_period" not in periodograms.columns:
+        return periodograms
+
+    keep = pd.Series(True, index=periodograms.index)
+    for metric, group in periodograms.groupby("metric"):
+        values = pd.to_numeric(group["best_period"], errors="coerce")
+        median = values.median()
+        mad = (values - median).abs().median()
+        if not np.isfinite(mad) or mad == 0:
+            continue
+        modified_z = 0.6745 * (values - median) / mad
+        outliers = modified_z.abs() > mad_z_threshold
+        if outliers.any():
+            servers = group.loc[outliers, "platform"].tolist() if "platform" in group else outliers.index.tolist()
+            print(f"  dropping {metric} periodogram outliers: {', '.join(map(str, servers))}")
+            keep.loc[group.index[outliers.to_numpy()]] = False
+
+    return periodograms[keep].reset_index(drop=True)
+
+
 def summarize_periodograms(periodograms: pd.DataFrame) -> pd.DataFrame:
     """Average within-subject periodogram summaries with valid-player weights."""
 
@@ -1393,6 +1422,7 @@ def run_grand_analysis(
     plot_grand_win_rate(local_summary, grand_dir / "grand_win_rate_by_local_hour.png")
 
     periodograms = load_metric_table(server_dirs, "within_subject_periodogram_summary.csv")
+    periodograms = drop_period_outliers(periodograms)
     period_summary = summarize_periodograms(periodograms)
     save_table(period_summary, grand_dir / "grand_within_subject_periodograms.csv")
 
