@@ -24,6 +24,13 @@ from riot_analysis import COLORS, configure_plot_style, fit_vonmises_1comp, fit_
 
 
 GRAND_DIR_NAME = "GRAND"
+
+# Canonical server set for the grand analysis: the eight regions used by the
+# source-dataset papers (Aung et al. 2018; Vardal et al. 2022). The remaining
+# platforms (ID1, TR1, PBE1) are excluded as small / unreliable. JP1 is retained;
+# its spurious DeltaMMR period is still screened by drop_period_outliers().
+ANALYSIS_PLATFORMS = ["BR1", "EUN1", "EUW1", "JP1", "LA1", "LA2", "NA1", "OC1"]
+
 COMPONENTS_TO_PLOT = ["PC1", "PC2", "PC3"]
 METRIC_ORDER = {"PC1": 0, "PC2": 1, "DeltaMMR": 2}
 PC_DENSITY_METRICS = ["PC1", "PC2"]
@@ -1385,7 +1392,7 @@ def write_final_html_report(
 
 def run_grand_analysis(
     output_root: str | Path = "results",
-    platforms: list[str] | None = None,
+    platforms: list[str] | None = ANALYSIS_PLATFORMS,
     clean: bool = True,
 ) -> dict[str, Any]:
     """Run the across-server grand analysis and write `results/GRAND/` outputs."""
