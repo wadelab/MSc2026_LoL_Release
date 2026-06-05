@@ -26,7 +26,7 @@ This is an across-server meta-analysis. Server-level outputs are summarized firs
 | --- | --- | --- | --- | --- | --- | --- |
 | PC1 | 11 | valid_players | 10043 | 23.968 | 0.071 | 0.022 |
 | PC2 | 11 | valid_players | 10043 | 24.033 | 0.075 | 0.024 |
-| DeltaMMR | 11 | valid_players | 10043 | 25.994 | 6.200 | 1.952 |
+| DeltaMMR | 9 | valid_players | 9000 | 24.024 | 0.089 | 0.030 |
 
 ## FDR Phase Counts
 

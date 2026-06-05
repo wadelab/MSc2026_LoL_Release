@@ -1026,6 +1026,15 @@ def plot_periods_and_phases(
         zorder=4,
     )
     ax.axhline(24.0, color=COLORS["ink"], linestyle="--", linewidth=1.2, label="24 h")
+
+    # Tight, data-driven y-limits so the (outlier-free) peaks fill the panel.
+    all_periods = pd.to_numeric(periodograms["best_period"], errors="coerce").dropna() if not periodograms.empty else pd.Series(dtype=float)
+    if not all_periods.empty:
+        lo = min(all_periods.min(), 24.0)
+        hi = max(all_periods.max(), 24.0)
+        pad = max((hi - lo) * 0.08, 0.05)
+        ax.set_ylim(lo - pad, hi + pad)
+
     ax.set_title("Player Periodogram Peak by Server")
     ax.set_xlabel("Metric")
     ax.set_ylabel("Best period (hours)")
