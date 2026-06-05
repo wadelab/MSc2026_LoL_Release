@@ -362,13 +362,20 @@ def sort_metric_table(table: pd.DataFrame) -> pd.DataFrame:
     return sorted_table.reset_index(drop=True)
 
 
-def drop_period_outliers(periodograms: pd.DataFrame, mad_z_threshold: float = 3.5) -> pd.DataFrame:
+def drop_period_outliers(
+    periodograms: pd.DataFrame,
+    mad_z_threshold: float = 3.5,
+    abs_floor_h: float = 3.0,
+) -> pd.DataFrame:
     """Drop per-server periodogram peaks that are robust outliers within a metric.
 
-    Uses a median/MAD modified z-score so a couple of aberrant servers (e.g. the
-    DeltaMMR peaks for the public-beta server and the lone double-period server)
-    do not distort the grand mean or the by-server scatter. Metrics whose peaks
-    are effectively constant (MAD == 0) are left untouched.
+    A peak is dropped only if it is *both* a robust outlier and at least
+    `abs_floor_h` hours from the metric median. The absolute-deviation gate keeps
+    legitimate near-circadian values (e.g. peaks one or two grid bins either side
+    of 24 h) while still removing harmonics (e.g. an 8 h or 12 h peak) and
+    long-period artifacts (e.g. a 44 h peak). When the grid anchors most servers
+    on the same bin the MAD collapses to zero; in that case the absolute-deviation
+    gate alone decides, so a lone aberrant server is still caught.
     """
 
     if periodograms.empty or "best_period" not in periodograms.columns:
@@ -378,11 +385,15 @@ def drop_period_outliers(periodograms: pd.DataFrame, mad_z_threshold: float = 3.
     for metric, group in periodograms.groupby("metric"):
         values = pd.to_numeric(group["best_period"], errors="coerce")
         median = values.median()
-        mad = (values - median).abs().median()
-        if not np.isfinite(mad) or mad == 0:
-            continue
-        modified_z = 0.6745 * (values - median) / mad
-        outliers = modified_z.abs() > mad_z_threshold
+        abs_dev = (values - median).abs()
+        mad = abs_dev.median()
+        far = abs_dev > abs_floor_h
+        if np.isfinite(mad) and mad > 0:
+            robust = (0.6745 * (values - median) / mad).abs() > mad_z_threshold
+            outliers = robust & far
+        else:
+            # Degenerate scale (most servers share a bin): the gate alone decides.
+            outliers = far
         if outliers.any():
             servers = group.loc[outliers, "platform"].tolist() if "platform" in group else outliers.index.tolist()
             print(f"  dropping {metric} periodogram outliers: {', '.join(map(str, servers))}")

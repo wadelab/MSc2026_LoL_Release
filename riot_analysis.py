@@ -446,10 +446,23 @@ def filter_hourly_window(hourly: pd.DataFrame, max_hour_limit: int) -> pd.DataFr
 
 
 def period_grid(config: AnalysisConfig, *, player: bool = False) -> tuple[np.ndarray, np.ndarray]:
-    """Return frequency and period arrays."""
+    """Return frequency and period arrays.
+
+    The grid is evenly spaced in frequency (as required for Lomb-Scargle) but is
+    anchored so that exactly 24 h (f = 1/24) is a grid node. This lets a true
+    circadian peak be reported at 24.00 h instead of snapping to a neighbouring
+    bin. The spacing and ~6-48 h span match a plain linspace of `n_freq` points;
+    the node count may differ by one.
+    """
 
     n_freq = config.player_n_freq if player else config.n_freq
-    frequency = np.linspace(1.0 / config.max_period_h, 1.0 / config.min_period_h, n_freq)
+    f_min = 1.0 / config.max_period_h
+    f_max = 1.0 / config.min_period_h
+    f_anchor = 1.0 / 24.0
+    df = (f_max - f_min) / (n_freq - 1)
+    k_low = int(np.floor((f_anchor - f_min) / df))
+    k_high = int(np.floor((f_max - f_anchor) / df))
+    frequency = f_anchor + np.arange(-k_low, k_high + 1) * df
     return frequency, 1.0 / frequency
 
 

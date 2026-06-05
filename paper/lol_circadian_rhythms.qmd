@@ -15,12 +15,13 @@ abstract: |
   in-game behaviour (two principal components of performance, PC1 and PC2) and of
   a skill-outcome measure (the change in matchmaking rating, ΔMMR). Within-subject
   Lomb–Scargle periodograms revealed a sharp circadian peak: across servers the
-  N-weighted best period was 23.99 h for PC1 and 24.04 h for PC2 (both SEM
-  ≤0.022 h). Per-player peak phases were individually significant (Benjamini–
+  N-weighted best period was 23.96 h for PC1 and 23.94 h for PC2 (both SEM
+  ≤0.03 h), and the population playtime periodogram peaked at exactly 24.0 h on
+  every server. Per-player peak phases were individually significant (Benjamini–
   Hochberg FDR < 0.05) for 21.4% of players on PC1 and 18.5% on PC2. Pooling these
   significant phases, a two-component von Mises mixture was preferred over a single
-  component by BIC for both PC1 (ΔBIC = 16.9; component peaks at 21.4 h and 7.2 h)
-  and PC2 (ΔBIC = 33.9; peaks at 9.4 h and 20.0 h) — a quantitative signature of
+  component by BIC for both PC1 (ΔBIC = 17.6; component peaks at 21.5 h and 7.2 h)
+  and PC2 (ΔBIC = 28.4; peaks at 9.4 h and 19.9 h) — a quantitative signature of
   two chronotype-like clusters. In contrast, ΔMMR carried essentially no circadian
   signal (0.3% of players FDR-significant; no server reached the threshold for a
   modality test). Behaviour, then, is strongly time-of-day structured and
@@ -161,10 +162,12 @@ on their irregular real-time stamps and computed a Lomb–Scargle periodogram
 [@lomb1976least; @scargle1982studies] over periods of 6–48 h
 (`player_n_freq = 2000` frequencies) using `astropy.timeseries.LombScargle`
 [@astropy2018; @vanderplas2018understanding]. The Lomb–Scargle estimator is
-appropriate here because match times are unevenly spaced. Per-player periodograms
-were then **incoherently averaged** within each server–metric cell (averaging
-*power*, which is phase-blind), and the period of maximum mean power was recorded
-as that cell's best period. A population-level periodogram of raw activity
+appropriate here because match times are unevenly spaced. The (evenly spaced)
+frequency grid is **anchored so that exactly 24 h is a grid node**, allowing a
+true circadian peak to be reported at 24.0 h rather than snapping to a
+neighbouring bin. Per-player periodograms were then **incoherently averaged**
+within each server–metric cell (averaging *power*, which is phase-blind), and the
+period of maximum mean power was recorded as that cell's best period. A population-level periodogram of raw activity
 (`TIMEPLAYED`) and of win rate was computed analogously over 6–48 h.
 
 ## Phase estimation and multiple-testing control
@@ -205,12 +208,16 @@ SciPy [@virtanen2020scipy], pandas [@mckinney2010data] and Matplotlib
 
 ::: {.callout-note}
 ## Outlier handling
-One server-level ΔMMR period estimate was a robust outlier and was excluded from
-the period meta-analysis: **JP1** (44.4 h — an implausible near-double of the
-circadian period). Outliers were flagged automatically with a median/MAD modified
-$z$-score (|z| > 3.5) computed *within* each metric, so PC1 and PC2 — whose peaks
-are tightly clustered at 23.9–24.1 h — were untouched. After exclusion the ΔMMR
-period rests on 7 servers / 7,000 players.
+Two server-level period estimates — both from **JP1** — were robust outliers and
+were excluded from the period meta-analysis: its ΔMMR peak (44.4 h, an implausible
+near-double of the circadian period) and its PC1 peak (8.0 h, a flip onto the
+third harmonic of the daily cycle). Outliers were flagged *within* each metric by
+a median/MAD modified $z$-score (|z| > 3.5) combined with an absolute-deviation
+gate (> 3 h from the median); the gate keeps genuine near-circadian values — peaks
+one or two grid bins either side of 24 h — while still catching harmonics and
+long-period artifacts, and it also decides the case where the 24 h-anchored grid
+collapses the MAD to zero by placing most servers on the same bin. After exclusion
+PC1 and ΔMMR rest on 7 servers / 7,000 players each; PC2 retains all 8.
 :::
 
 # Results
@@ -223,19 +230,19 @@ server (NA1): PC1 and PC2 each produce a clean spike at ~24 h above a flat
 background, whereas ΔMMR yields a broad, low, ragged spectrum with no dominant
 period.
 
-![Incoherently averaged within-subject Lomb–Scargle periodograms for one server (NA1, 1,000 players). PC1 (left) and PC2 (centre) show sharp circadian peaks at 24.07 h; ΔMMR (right) shows a weak, noisy spectrum with peak power roughly an order of magnitude smaller and no clear circadian component.](../results/NA1/within_subject_periodograms.png){#fig-periodograms width=100%}
+![Incoherently averaged within-subject Lomb–Scargle periodograms for one server (NA1, 1,000 players). PC1 (left, peak 24.08 h) and PC2 (centre, 23.92 h) show sharp circadian spikes above a flat background; ΔMMR (right) is a weak, noisy spectrum with peak power roughly an order of magnitude smaller, its nominal 24.00 h peak barely rising above the noise.](../results/NA1/within_subject_periodograms.png){#fig-periodograms width=100%}
 
 This pattern is consistent across all servers. The N-weighted best period
-(@fig-summary, left) is **23.99 h for PC1** (SEM 0.022) and **24.04 h for PC2**
-(SEM 0.019), both indistinguishable from 24 h, with very small between-server
-scatter. The ΔMMR best period averages 23.99 h but only after removing the single
-outlier server (JP1), and rests on a far weaker peak (@tbl-periods).
+(@fig-summary, left) is **23.96 h for PC1** (SEM 0.029) and **23.94 h for PC2**
+(SEM 0.020), both indistinguishable from 24 h, with very small between-server
+scatter; the ΔMMR peak averages **exactly 24.00 h** (after removing the JP1
+outlier) but rests on a far weaker peak (@tbl-periods).
 
 | Metric | Servers | Players | Best period (h) | SEM (h) |
 |:--|--:|--:|--:|--:|
-| PC1 | 8 | 8,000 | 23.99 | 0.022 |
-| PC2 | 8 | 8,000 | 24.04 | 0.019 |
-| ΔMMR | 7 | 7,000 | 23.99 | 0.018 |
+| PC1 | 7 | 7,000 | 23.96 | 0.029 |
+| PC2 | 8 | 8,000 | 23.94 | 0.020 |
+| ΔMMR | 7 | 7,000 | 24.00 | 0.015 |
 
 : N-weighted within-subject best periods. {#tbl-periods}
 
@@ -245,12 +252,12 @@ PC1 and **18.5%** in PC2, but only **0.3%** do in ΔMMR (26 of 8,000 players).
 Behaviour is strongly clock-locked; the *outcome* of competition is essentially
 clock-agnostic.
 
-![Within-subject rhythm summary across 8 servers. **Left:** per-server best period for each metric (dot size ∝ valid players) with the N-weighted mean ± SEM (diamonds) and the 24 h reference (dashed). PC1, PC2 and the outlier-screened ΔMMR all sit at ~24 h. **Right:** N-weighted fraction of players whose peak phase is FDR-significant — high for the behavioural PCs, near zero for ΔMMR.](../results/GRAND/grand_within_subject_summary.png){#fig-summary width=100%}
+![Within-subject rhythm summary across 8 servers. **Left:** per-server best period for each metric (dot size ∝ valid players) with the N-weighted mean ± SEM (diamonds) and the 24 h reference (dashed). After outlier screening (JP1 removed from PC1 and ΔMMR), all three metrics sit at ~24 h. **Right:** N-weighted fraction of players whose peak phase is FDR-significant — high for the behavioural PCs, near zero for ΔMMR.](../results/GRAND/grand_within_subject_summary.png){#fig-summary width=100%}
 
-For reference, the population-level periodograms behave as expected: raw win rate
-peaks near 24 h (N-weighted 23.4 h), while raw activity (`TIMEPLAYED`) is
-dominated by sub-daily structure (17.6 h, reflecting multi-modal play sessions
-rather than a single daily cycle).
+For reference, the population-level periodograms behave as expected: with the
+24 h-anchored grid the raw activity periodogram (`TIMEPLAYED`) peaks at **exactly
+24.0 h on every one of the eight servers**, and raw win rate peaks near 24 h on
+average (N-weighted 23.6 h, though noisier across servers).
 
 ## What the components mean {#sec-pca}
 
@@ -276,19 +283,19 @@ FDR-significant phases and comparing circular models, **both behavioural
 components prefer a two-component von Mises mixture** (@fig-bimodality,
 @tbl-bimodality):
 
-- **PC1**: $\Delta\text{BIC} = 16.9$ in favour of two components, with peaks at
-  **21.4 h** and **7.2 h** (weights 0.57 / 0.43) — an evening-peaking "owl"
+- **PC1**: $\Delta\text{BIC} = 17.6$ in favour of two components, with peaks at
+  **21.5 h** and **7.2 h** (weights 0.57 / 0.43) — an evening-peaking "owl"
   cluster and a morning-peaking "lark" cluster of nearly equal size.
-- **PC2**: $\Delta\text{BIC} = 33.9$, with peaks at **9.4 h** and **20.0 h**
-  (weights 0.67 / 0.33) — again a morning and an evening mode.
+- **PC2**: $\Delta\text{BIC} = 28.4$, with peaks at **9.4 h** and **19.9 h**
+  (weights 0.65 / 0.35) — again a morning and an evening mode.
 
 ΔMMR could not be tested for modality at all: no server reached the 20-significant-phase
 threshold, so the pooled ΔMMR cell is empty.
 
 | Metric | Servers | Phases | Preferred | ΔBIC (1−2) | Peak 1 (h) | Peak 2 (h) | Weights |
 |:--|--:|--:|:--|--:|--:|--:|:--|
-| PC1 | 8 | 1,713 | 2-component | 16.9 | 21.4 | 7.2 | 0.57 / 0.43 |
-| PC2 | 7 | 1,463 | 2-component | 33.9 | 9.4 | 20.0 | 0.67 / 0.33 |
+| PC1 | 8 | 1,715 | 2-component | 17.6 | 21.5 | 7.2 | 0.57 / 0.43 |
+| PC2 | 7 | 1,465 | 2-component | 28.4 | 9.4 | 19.9 | 0.65 / 0.35 |
 | ΔMMR | 0 | 0 | — | — | — | — | — |
 
 : Pooled circular bimodality test on FDR-significant peak phases. {#tbl-bimodality}
@@ -296,8 +303,8 @@ threshold, so the pooled ΔMMR cell is empty.
 ![Pooled circular bimodality fits. For PC1 (top) and PC2 (bottom): histograms of FDR-significant local peak hours with the one-component fit (dashed) and two-component mixture (solid; dotted components), shown in both hour-domain (left) and polar (right) views. Both metrics show two clear modes — a morning and an evening cluster — and the mixture is preferred by BIC.](../results/GRAND/grand_pooled_circular_bimodality_fits.png){#fig-bimodality width=100%}
 
 The per-server tally is consistent: across servers, FDR-significant PC1 phases
-split 820 (one-component-preferred) to 893 (two-component-preferred) and PC2 698
-to 765 — i.e. a majority of server-level phases independently favour the
+split 818 (one-component-preferred) to 897 (two-component-preferred) and PC2 704
+to 761 — i.e. a majority of server-level phases independently favour the
 two-cluster description, which is what produces a decisive *pooled* preference
 once power is aggregated.
 
