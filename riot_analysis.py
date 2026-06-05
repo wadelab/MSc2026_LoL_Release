@@ -12,6 +12,7 @@ It keeps the main analysis steps explicit:
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -71,6 +72,10 @@ PLAYER_PCA_FEATURE_MAP = {
 }
 
 GOOD_PCA_COLS = ["gold_per_min", "damdealt_per_min", "kills_per_min", "assists_per_min"]
+
+SERVER_RIOT_PARQUET = Path("/raid/data/riot/riotData.parquet")
+COLAB_RIOT_PARQUET = Path("/content/drive/Shareddrives/MSc_2026_Riot/db/riotData.parquet")
+RIOT_PARQUET_ENV_VARS = ("RIOT_DB_PATH", "RIOT_PARQUET_PATH")
 
 
 @dataclass
@@ -133,6 +138,234 @@ def styled_hist(ax: Any, data: Any, bins: Any = 50, variant: str = "secondary", 
     ax.hist(data, bins=bins, **hist_kwargs)
     style_axes(ax, grid_axis="y")
     return ax
+
+
+def running_in_colab() -> bool:
+    """Return True when the code is running in a Google Colab runtime."""
+
+    try:
+        import google.colab  # type: ignore[import-not-found]  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+def mount_colab_drive() -> None:
+    """Mount Google Drive in Colab so the shared Riot Parquet can be found."""
+
+    from google.colab import drive  # type: ignore[import-not-found]
+
+    drive.mount("/content/drive")
+
+
+def unique_paths(paths: list[Path]) -> list[Path]:
+    """Return paths in first-seen order without duplicates."""
+
+    seen = set()
+    unique = []
+    for path in paths:
+        key = str(path)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(path)
+    return unique
+
+
+def resolve_riot_parquet(parquet_file: str | Path | None = None, *, mount_drive: bool = True) -> Path:
+    """Find the raw Riot Parquet on this server or in the Colab shared drive."""
+
+    if parquet_file is not None:
+        path = Path(parquet_file).expanduser()
+        if path.exists():
+            return path
+        raise FileNotFoundError(f"Explicit Riot Parquet path does not exist: {path}")
+
+    candidates = []
+    for env_var in RIOT_PARQUET_ENV_VARS:
+        env_value = os.environ.get(env_var)
+        if env_value:
+            candidates.append(Path(env_value).expanduser())
+
+    candidates.extend([SERVER_RIOT_PARQUET, COLAB_RIOT_PARQUET])
+    candidates = unique_paths(candidates)
+
+    for path in candidates:
+        if path.exists():
+            return path
+
+    mount_error = None
+    if mount_drive and running_in_colab():
+        try:
+            mount_colab_drive()
+        except Exception as exc:  # pragma: no cover - depends on Colab runtime UI.
+            mount_error = exc
+        if COLAB_RIOT_PARQUET.exists():
+            return COLAB_RIOT_PARQUET
+
+    checked = "\n".join(f"  - {path}" for path in candidates)
+    message = (
+        "Could not locate riotData.parquet. Set RIOT_DB_PATH or RIOT_PARQUET_PATH, "
+        "or place the file at one of:\n"
+        f"{checked}"
+    )
+    if mount_error is not None:
+        message += f"\nColab Drive mount failed with: {mount_error}"
+    raise FileNotFoundError(message)
+
+
+def duckdb_string_literal(value: str | Path) -> str:
+    """Return a single-quoted SQL literal for DuckDB path strings."""
+
+    return "'" + str(value).replace("'", "''") + "'"
+
+
+def duckdb_relation_exists(conn: duckdb.DuckDBPyConnection, relation_name: str) -> bool:
+    """Return True if a table or view exists in the active DuckDB file."""
+
+    row = conn.execute(
+        """
+        SELECT COUNT(*)
+        FROM information_schema.tables
+        WHERE table_schema = 'main'
+          AND table_name = ?;
+        """,
+        [relation_name],
+    ).fetchone()
+    return bool(row and row[0])
+
+
+def duckdb_relation_columns(conn: duckdb.DuckDBPyConnection, relation_name: str) -> set[str]:
+    """Return lower-case column names for a DuckDB table or view."""
+
+    safe_name = relation_name.replace("'", "''")
+    rows = conn.execute(f"PRAGMA table_info('{safe_name}')").fetchall()
+    return {row[1].lower() for row in rows}
+
+
+def create_riot_view(conn: duckdb.DuckDBPyConnection, parquet_path: Path) -> None:
+    """Point the DuckDB `riotData` view at the resolved raw Parquet file."""
+
+    conn.execute(
+        f"CREATE OR REPLACE VIEW riotData AS "
+        f"SELECT * FROM read_parquet({duckdb_string_literal(parquet_path)})"
+    )
+
+
+def build_hourly_agg_table(conn: duckdb.DuckDBPyConnection) -> None:
+    """Materialize hourly platform aggregates used by the analysis workflow."""
+
+    conn.execute("DROP TABLE IF EXISTS hourly_agg")
+    conn.execute(
+        """
+        CREATE TABLE hourly_agg AS
+        SELECT
+          PLATFORMID AS platformid,
+          CAST(FLOOR(CAST(TIMESTAMP AS DOUBLE) / 3600000.0) AS BIGINT) AS hour_idx,
+          AVG(CAST(NULLIF(NEUTRALCREEP, '') AS DOUBLE)) AS neutralcreep_mean,
+          AVG(CAST(NULLIF(ENEMYCREEP, '') AS DOUBLE)) AS enemycreep_mean,
+          AVG(CAST(NULLIF(GOLD, '') AS DOUBLE)) AS gold_mean,
+          AVG(CAST(NULLIF(DAMDEALT, '') AS DOUBLE)) AS damdealt_mean,
+          AVG(CAST(NULLIF(TIMEDEAD, '') AS DOUBLE)) AS timedead_mean,
+          AVG(CAST(NULLIF(TIMEPLAYED, '') AS DOUBLE)) AS timeplayed_mean,
+          AVG(CAST(NULLIF(KILLS, '') AS DOUBLE)) AS kills_mean,
+          AVG(CAST(NULLIF(DEATHS, '') AS DOUBLE)) AS deaths_mean,
+          AVG(CAST(NULLIF(ASSISTS, '') AS DOUBLE)) AS assists_mean,
+          COUNT(*) AS n
+        FROM riotData
+        WHERE PLATFORMID IS NOT NULL
+          AND TIMESTAMP IS NOT NULL
+        GROUP BY PLATFORMID, hour_idx;
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_hourly_agg_platform_hour ON hourly_agg(platformid, hour_idx)")
+
+
+def ensure_hourly_agg_table(
+    conn: duckdb.DuckDBPyConnection,
+    *,
+    rebuild: bool = False,
+    verbose: bool = True,
+) -> bool:
+    """Create hourly_agg when missing, or rebuild it when requested."""
+
+    required_columns = {"platformid", "hour_idx", "n"} | {
+        col.lower() for col in AGG_COL_MAP.values()
+    }
+    exists = duckdb_relation_exists(conn, "hourly_agg")
+
+    if exists and not rebuild:
+        existing_columns = duckdb_relation_columns(conn, "hourly_agg")
+        if required_columns.issubset(existing_columns):
+            if verbose:
+                print("hourly_agg table found; using existing aggregate table.", flush=True)
+            return False
+        if verbose:
+            print("hourly_agg exists but is missing expected columns; rebuilding it.", flush=True)
+
+    if verbose:
+        if rebuild and exists:
+            print("Rebuilding hourly_agg table from riotData. This may take a few minutes.", flush=True)
+        elif not exists:
+            print("Building hourly_agg table from riotData. This may take a few minutes.", flush=True)
+
+    build_hourly_agg_table(conn)
+    if verbose:
+        print("hourly_agg rebuilt and indexed.", flush=True)
+    return True
+
+
+def existing_database_is_usable(db_file: str | Path) -> bool:
+    """Return True when an existing DuckDB has readable raw and aggregate relations."""
+
+    try:
+        conn = duckdb.connect(str(db_file), read_only=True)
+        try:
+            conn.execute("SELECT 1 FROM riotData LIMIT 1").fetchone()
+            conn.execute("SELECT 1 FROM hourly_agg LIMIT 1").fetchone()
+            return True
+        finally:
+            conn.close()
+    except Exception:
+        return False
+
+
+def connect_analysis_database(
+    db_file: str | Path = "riot_local.duckdb",
+    *,
+    parquet_file: str | Path | None = None,
+    rebuild_hourly_agg: bool = False,
+    read_only: bool = True,
+    verbose: bool = True,
+) -> duckdb.DuckDBPyConnection:
+    """Prepare and open the local DuckDB cache for the full analysis workflow."""
+
+    db_path = Path(db_file).expanduser()
+    if db_path.parent != Path("."):
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        parquet_path = resolve_riot_parquet(parquet_file)
+    except FileNotFoundError:
+        if db_path.exists() and existing_database_is_usable(db_path):
+            if verbose:
+                print(f"Using existing DuckDB cache without rebuilding: {db_path}", flush=True)
+            return duckdb.connect(str(db_path), read_only=read_only)
+        raise
+
+    if verbose:
+        print(f"Using Riot Parquet: {parquet_path}", flush=True)
+        print(f"Using DuckDB cache: {db_path}", flush=True)
+
+    conn = duckdb.connect(str(db_path), read_only=False)
+    try:
+        create_riot_view(conn, parquet_path)
+        ensure_hourly_agg_table(conn, rebuild=rebuild_hourly_agg, verbose=verbose)
+        conn.execute("CHECKPOINT")
+    finally:
+        conn.close()
+
+    return duckdb.connect(str(db_path), read_only=read_only)
 
 
 def connect_read_only(db_file: str | Path = "riot_local.duckdb") -> duckdb.DuckDBPyConnection:

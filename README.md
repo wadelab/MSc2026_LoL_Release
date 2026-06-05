@@ -33,19 +33,46 @@ jupyter lab
 
 ## Data
 
-To rerun the analysis, place the DuckDB file at:
+The full rerun needs the raw Riot Parquet data. This large file is not
+included in git.
+
+By default the scripts look for the Parquet data in this order:
+
+1. `--parquet-file <path>` on the command line
+2. `RIOT_DB_PATH` or `RIOT_PARQUET_PATH`
+3. this server:
+
+```text
+/raid/data/riot/riotData.parquet
+```
+
+4. Colab shared Google Drive:
+
+```text
+/content/drive/Shareddrives/MSc_2026_Riot/db/riotData.parquet
+```
+
+The local DuckDB file is only a rebuildable cache/pointer file. It stores the
+`riotData` view and the materialized `hourly_agg` table used by the analysis.
+It is created or refreshed automatically at:
 
 ```text
 riot_local.duckdb
 ```
 
-The Python code opens it read-only. Generated WAL/database files are ignored by git.
+Generated DuckDB/WAL files are ignored by git.
+
+To force a rebuild of the hourly aggregate cache from the raw Parquet:
+
+```bash
+python Parquet_longerAnalyses_May_26.py --rebuild-hourly-agg
+```
 
 ## Recommended Student Path
 
 1. Open `notebooks/LoL_Rhythm_Analysis_Concise.ipynb`.
 2. Read the setup and final-report cells first.
-3. If you have `riot_local.duckdb`, set `RUN_ANALYSIS = True` in the notebook to run a server.
+3. If the raw Parquet data are available on this server or in Colab Drive, set `RUN_ANALYSIS = True` in the notebook to run a server.
 4. Use the script for full reruns:
 
 ```bash

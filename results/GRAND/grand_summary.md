@@ -16,7 +16,7 @@ This is an across-server meta-analysis. Server-level outputs are summarized firs
 | success_pc1_win_rate_loading | 11 | server_n_win_games | 101654115.000 | 0.291 | 0.098 | 0.037 | 0.354 |
 | success_pc2_win_rate_loading | 11 | server_n_win_games | 101654115.000 | 0.144 | 0.103 | -0.289 | 0.246 |
 | success_pc3_win_rate_loading | 11 | server_n_win_games | 101654115.000 | 0.285 | 0.271 | -0.001 | 0.990 |
-| pc1_phase_fdr_significant | 11 | pc1_phase_players | 10043.000 | 187.204 | 185.203 | 2.000 | 718.000 |
+| pc1_phase_fdr_significant | 11 | pc1_phase_players | 10043.000 | 187.004 | 185.018 | 2.000 | 717.000 |
 | pc2_phase_fdr_significant | 11 | pc2_phase_players | 10043.000 | 154.436 | 219.911 | 0.000 | 765.000 |
 | deltammr_phase_fdr_significant | 11 | deltammr_phase_players | 10043.000 | 3.087 | 1.708 | 0.000 | 6.000 |
 
@@ -32,7 +32,7 @@ This is an across-server meta-analysis. Server-level outputs are summarized firs
 
 | metric | n_servers | weight_col | total_players_analyzed | total_fdr_significant | weighted_fdr_fraction |
 | --- | --- | --- | --- | --- | --- |
-| PC1 | 11 | players_analyzed | 10043 | 1882 | 0.187 |
+| PC1 | 11 | players_analyzed | 10043 | 1880 | 0.187 |
 | PC2 | 11 | players_analyzed | 10043 | 1551 | 0.154 |
 | DeltaMMR | 11 | players_analyzed | 10043 | 31 | 0.003 |
 
@@ -40,7 +40,7 @@ This is an across-server meta-analysis. Server-level outputs are summarized firs
 
 | metric | n_servers | weight_col | total_fdr_significant | fit_servers | skipped_servers | preferred_1_component_phases | preferred_2_component_phases |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| PC1 | 11 | n_fdr_significant | 1882 | 10 | 1 | 986 | 894 |
+| PC1 | 11 | n_fdr_significant | 1880 | 10 | 1 | 985 | 893 |
 | PC2 | 11 | n_fdr_significant | 1551 | 8 | 3 | 770 | 765 |
 | DeltaMMR | 11 | n_fdr_significant | 31 | 0 | 11 | 0 | 0 |
 
@@ -48,13 +48,13 @@ This is an across-server meta-analysis. Server-level outputs are summarized firs
 
 | metric | n_servers | total_phases | weighted_peak_hour | kappa | min_phases |
 | --- | --- | --- | --- | --- | --- |
-| PC1 | 10 | 1880 | 22.200 | 4.000 | 20 |
-| PC2 | 8 | 1535 | 9.800 | 4.000 | 20 |
+| PC1 | 10 | 1878 | 22.100 | 4.000 | 20 |
+| PC2 | 8 | 1535 | 9.700 | 4.000 | 20 |
 
 ## Pooled Circular Bimodality Test
 
 | metric | n_servers | n_phases | preferred | delta_bic_1_minus_2 | component_1_h | component_2_h | component_1_weight | component_2_weight |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| PC1 | 10 | 1880 | 2-component | 16.463 | 21.211 | 7.151 | 0.551 | 0.449 |
-| PC2 | 8 | 1535 | 2-component | 33.740 | 9.331 | 19.911 | 0.647 | 0.353 |
+| PC1 | 10 | 1878 | 2-component | 19.003 | 21.202 | 7.154 | 0.553 | 0.447 |
+| PC2 | 8 | 1535 | 2-component | 33.744 | 9.316 | 19.894 | 0.646 | 0.354 |
 | DeltaMMR | 0 | 0 |  |  |  |  |  |  |

@@ -22,7 +22,7 @@ matplotlib.use("Agg")
 import pandas as pd
 
 from grand_analysis import run_grand_analysis
-from riot_analysis import AnalysisConfig, available_platforms, connect_read_only, run_platform_analysis
+from riot_analysis import AnalysisConfig, available_platforms, connect_analysis_database, run_platform_analysis
 
 
 SUMMARY_COLUMNS = [
@@ -58,7 +58,19 @@ def parse_args() -> argparse.Namespace:
     """Parse command-line options."""
 
     parser = argparse.ArgumentParser(description="Run LoL rhythm analyses by server.")
-    parser.add_argument("--duckdb-file", default="riot_local.duckdb", help="Path to the DuckDB file.")
+    parser.add_argument(
+        "--duckdb-file",
+        default="riot_local.duckdb",
+        help="Path to the local DuckDB cache file. It is created or refreshed from the raw Parquet when needed.",
+    )
+    parser.add_argument(
+        "--parquet-file",
+        default=None,
+        help=(
+            "Path to raw riotData.parquet. Defaults to RIOT_DB_PATH/RIOT_PARQUET_PATH, "
+            "/raid/data/riot/riotData.parquet, or the Colab shared-drive path."
+        ),
+    )
     parser.add_argument("--output-root", default="results", help="Folder where per-server outputs are written.")
     parser.add_argument(
         "--platform",
@@ -94,6 +106,11 @@ def parse_args() -> argparse.Namespace:
         "--grand-only",
         action="store_true",
         help="Only regenerate results/GRAND from existing per-server outputs.",
+    )
+    parser.add_argument(
+        "--rebuild-hourly-agg",
+        action="store_true",
+        help="Force rebuild of hourly_agg from raw riotData.parquet before running platforms.",
     )
     parser.add_argument(
         "--summary-csv",
@@ -194,7 +211,11 @@ def main() -> int:
         )
         return 0
 
-    conn = connect_read_only(args.duckdb_file)
+    conn = connect_analysis_database(
+        args.duckdb_file,
+        parquet_file=args.parquet_file,
+        rebuild_hourly_agg=args.rebuild_hourly_agg,
+    )
     try:
         platforms = selected_platforms(conn, args.platform, args.exclude)
         if not platforms:
