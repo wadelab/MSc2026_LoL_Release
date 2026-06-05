@@ -1,9 +1,9 @@
 """Run the League of Legends rhythm analysis outside the notebook.
 
-By default this script runs every platform found in `hourly_agg` and writes
-outputs to separate folders under `results/`, for example `results/EUW1/`.
-The reusable functions live in `riot_analysis.py` so the notebook and script
-workflow can share the same analysis logic.
+By default this script runs the original 8 Aung et al. platforms found in
+`hourly_agg` and writes outputs to separate folders under `results/`, for
+example `results/EUW1/`. The reusable functions live in `riot_analysis.py`
+so the notebook and script workflow can share the same analysis logic.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ matplotlib.use("Agg")
 
 import pandas as pd
 
-from grand_analysis import run_grand_analysis
+from grand_analysis import ANALYSIS_PLATFORMS, run_grand_analysis
 from riot_analysis import AnalysisConfig, available_platforms, connect_analysis_database, run_platform_analysis
 
 
@@ -75,7 +75,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--platform",
         action="append",
-        help="Platform/server to run. Repeat this option to run several. Defaults to every platform.",
+        help=(
+            "Platform/server to run. Repeat this option to run several. "
+            "Defaults to the original 8 Aung et al. servers."
+        ),
     )
     parser.add_argument(
         "--exclude",
@@ -123,10 +126,11 @@ def parse_args() -> argparse.Namespace:
 def selected_platforms(conn, requested: list[str] | None, excluded: list[str]) -> list[str]:
     """Return the platform list requested by the user."""
 
+    available = {platform.upper() for platform in available_platforms(conn)}
     if requested:
-        platforms = [platform.upper() for platform in requested]
+        platforms = [platform.upper() for platform in requested if platform.upper() in available]
     else:
-        platforms = available_platforms(conn)
+        platforms = [platform.upper() for platform in ANALYSIS_PLATFORMS if platform.upper() in available]
 
     excluded_set = {platform.upper() for platform in excluded}
     return [platform for platform in platforms if platform.upper() not in excluded_set]
