@@ -22,11 +22,11 @@ This is an across-server meta-analysis. Server-level outputs are summarized firs
 
 ## Within-Subject Period Peaks
 
-| metric | n_servers | weight_col | total_valid_players | weighted_best_period | weighted_sd_best_period |
-| --- | --- | --- | --- | --- | --- |
-| PC1 | 11 | valid_players | 10043 | 23.968 | 0.071 |
-| PC2 | 11 | valid_players | 10043 | 24.033 | 0.075 |
-| DeltaMMR | 11 | valid_players | 10043 | 25.994 | 6.200 |
+| metric | n_servers | weight_col | total_valid_players | weighted_best_period | weighted_sd_best_period | weighted_sem_best_period |
+| --- | --- | --- | --- | --- | --- | --- |
+| PC1 | 11 | valid_players | 10043 | 23.968 | 0.071 | 0.022 |
+| PC2 | 11 | valid_players | 10043 | 24.033 | 0.075 | 0.024 |
+| DeltaMMR | 11 | valid_players | 10043 | 25.994 | 6.200 | 1.952 |
 
 ## FDR Phase Counts
 

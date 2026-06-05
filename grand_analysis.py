@@ -909,7 +909,12 @@ def plot_pooled_circular_bimodality_fits(
     plt.close(fig)
 
 
-def plot_periods_and_phases(period_summary: pd.DataFrame, phase_summary: pd.DataFrame, output_path: Path) -> None:
+def plot_periods_and_phases(
+    period_summary: pd.DataFrame,
+    periodograms: pd.DataFrame,
+    phase_summary: pd.DataFrame,
+    output_path: Path,
+) -> None:
     """Save grand periodogram and FDR phase-count summary panels."""
 
     if period_summary.empty or phase_summary.empty:
@@ -918,17 +923,85 @@ def plot_periods_and_phases(period_summary: pd.DataFrame, phase_summary: pd.Data
     fig, axes = plt.subplots(1, 2, figsize=(14.5, 5.2))
     ax = axes[0]
     period_order = sort_metric_table(period_summary)
-    ax.bar(
-        period_order["metric"],
-        period_order["weighted_best_period"],
-        color=[COLORS["primary"], COLORS["secondary"], COLORS["accent"]][: len(period_order)],
-        alpha=0.86,
-        edgecolor="white",
+    period_colors = [COLORS["primary"], COLORS["secondary"], COLORS["accent"]][: len(period_order)]
+    period_labels = period_order["metric"].tolist()
+    period_positions = np.arange(1, len(period_labels) + 1)
+
+    box_data = []
+    for _, row in period_order.iterrows():
+        if periodograms.empty:
+            values = np.array([], dtype=float)
+        else:
+            values = pd.to_numeric(
+                periodograms.loc[periodograms["metric"] == row["metric"], "best_period"],
+                errors="coerce",
+            ).dropna().to_numpy(dtype=float)
+        if len(values) == 0 and pd.notna(row["weighted_best_period"]):
+            values = np.array([float(row["weighted_best_period"])])
+        box_data.append(values)
+
+    box = ax.boxplot(
+        box_data,
+        positions=period_positions,
+        widths=0.48,
+        patch_artist=True,
+        showfliers=False,
+        medianprops={"color": "white", "linewidth": 1.8},
+        whiskerprops={"color": COLORS["muted"], "linewidth": 1.2},
+        capprops={"color": COLORS["muted"], "linewidth": 1.2},
+        boxprops={"edgecolor": "white", "linewidth": 1.1},
+    )
+    for patch, color in zip(box["boxes"], period_colors):
+        patch.set_facecolor(color)
+        patch.set_alpha(0.55)
+
+    for pos, metric, color in zip(period_positions, period_labels, period_colors):
+        metric_rows = periodograms[periodograms["metric"] == metric] if not periodograms.empty else pd.DataFrame()
+        if metric_rows.empty:
+            continue
+        values = pd.to_numeric(metric_rows["best_period"], errors="coerce")
+        valid = values.notna()
+        values = values[valid].to_numpy(dtype=float)
+        weights = pd.to_numeric(metric_rows.loc[valid, "valid_players"], errors="coerce").fillna(1.0).to_numpy(dtype=float)
+        if len(values) == 0:
+            continue
+        jitter = np.linspace(-0.13, 0.13, len(values)) if len(values) > 1 else np.array([0.0])
+        max_weight = np.nanmax(weights) if np.isfinite(weights).any() else 1.0
+        max_weight = max(max_weight, 1.0)
+        size = 28 + 58 * np.sqrt(weights / max_weight)
+        ax.scatter(
+            np.full(len(values), pos) + jitter,
+            values,
+            s=size,
+            color=color,
+            alpha=0.72,
+            edgecolor="white",
+            linewidth=0.7,
+            zorder=3,
+            label="Server peak" if pos == period_positions[0] else None,
+        )
+
+    means = period_order["weighted_best_period"].to_numpy(dtype=float)
+    sems = period_order["weighted_sem_best_period"].to_numpy(dtype=float)
+    ax.errorbar(
+        period_positions,
+        means,
+        yerr=sems,
+        fmt="D",
+        markersize=5.8,
+        color=COLORS["ink"],
+        ecolor=COLORS["ink"],
+        elinewidth=1.4,
+        capsize=4,
+        label="N-weighted mean +/- SEM",
+        zorder=4,
     )
     ax.axhline(24.0, color=COLORS["ink"], linestyle="--", linewidth=1.2, label="24 h")
-    ax.set_title("Weighted Mean Player Periodogram Peak")
+    ax.set_title("Player Periodogram Peak by Server")
     ax.set_xlabel("Metric")
     ax.set_ylabel("Best period (hours)")
+    ax.set_xticks(period_positions)
+    ax.set_xticklabels(period_labels)
     ax.legend(frameon=False)
     style_axes(ax, grid_axis="y")
 
@@ -1018,6 +1091,7 @@ def write_grand_markdown(
                 "total_valid_players",
                 "weighted_best_period",
                 "weighted_sd_best_period",
+                "weighted_sem_best_period",
             ],
         )
     )
@@ -1237,7 +1311,7 @@ def write_final_html_report(
 
   <h2>Weighted Rhythm and Phase Summaries</h2>
   <img src="grand_within_subject_summary.png" alt="Weighted within-subject period and phase summary">
-  {_html_table(period_summary, ["metric", "n_servers", "weight_col", "total_valid_players", "weighted_best_period", "weighted_sd_best_period"])}
+  {_html_table(period_summary, ["metric", "n_servers", "weight_col", "total_valid_players", "weighted_best_period", "weighted_sd_best_period", "weighted_sem_best_period"])}
   {_html_table(phase_summary, ["metric", "n_servers", "weight_col", "total_players_analyzed", "total_fdr_significant", "weighted_fdr_fraction"])}
 
   <h2>Circular Model Preference Across Servers</h2>
@@ -1327,6 +1401,7 @@ def run_grand_analysis(
     save_table(phase_summary, grand_dir / "grand_phase_summary.csv")
     plot_periods_and_phases(
         period_summary,
+        periodograms,
         phase_summary,
         grand_dir / "grand_within_subject_summary.png",
     )
