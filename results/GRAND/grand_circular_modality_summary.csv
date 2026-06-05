@@ -1,0 +1,4 @@
+metric,n_servers,weight_col,total_fdr_significant,fit_servers,skipped_servers,preferred_1_component,preferred_2_component,preferred_1_component_phases,preferred_2_component_phases,skipped_phases
+PC1,11,n_fdr_significant,1882,10,1,8,2,986,894,2
+PC2,11,n_fdr_significant,1551,8,3,7,1,770,765,16
+DeltaMMR,11,n_fdr_significant,31,0,11,0,0,0,0,31
