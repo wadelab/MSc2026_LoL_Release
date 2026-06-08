@@ -102,8 +102,8 @@ def configure_plot_style() -> None:
 
     plt.rcParams.update(
         {
-            "figure.facecolor": "#fcfbf8",
-            "axes.facecolor": COLORS["panel"],
+            "figure.facecolor": "white",
+            "axes.facecolor": "white",
             "axes.edgecolor": "#d9d1c8",
             "axes.titleweight": "bold",
             "axes.labelcolor": COLORS["ink"],
@@ -112,7 +112,7 @@ def configure_plot_style() -> None:
             "grid.color": "#cfc7bc",
             "grid.linestyle": "--",
             "grid.alpha": 0.28,
-            "savefig.facecolor": "#fcfbf8",
+            "savefig.facecolor": "white",
         }
     )
 

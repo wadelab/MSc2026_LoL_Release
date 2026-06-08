@@ -913,7 +913,7 @@ def plot_pooled_circular_bimodality_fits(
             ha="left",
             fontsize=10,
             color=COLORS["ink"],
-            bbox={"facecolor": "#fcfbf8", "edgecolor": "#d9d1c8", "alpha": 0.9, "pad": 6},
+            bbox={"facecolor": "white", "edgecolor": "#d9d1c8", "alpha": 0.9, "pad": 6},
         )
         style_axes(ax1, grid_axis="y")
 

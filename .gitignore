@@ -22,3 +22,9 @@ data/
 results/*/
 !results/GRAND/
 !results/GRAND/**
+
+# Never track per-account selection lists anywhere — they carry raw Riot ACCOUNTIDs
+**/top_players_*.csv
+
+# Staged public deposit folder (regenerate with ./make_deposit.sh)
+/deposit/
