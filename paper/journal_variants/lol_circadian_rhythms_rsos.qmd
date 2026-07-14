@@ -19,30 +19,33 @@ abstract: |
   the eight play-volume curves onto one evening-peaked schedule, cutting the
   across-server spread in mean play hour from 5.83 h to 1.12 h. Within-subject
   Lomb–Scargle periodograms revealed a sharp circadian peak: across servers the
-  N-weighted best period was 23.96 h for PC1 and 23.94 h for PC2 (both SEM
-  ≤0.03 h), and the population playtime periodogram peaked at exactly 24.0 h on
-  every server. Per-player peak phases were individually significant (Benjamini–
-  Hochberg FDR < 0.05) for 14.2% of players on PC1 and 10.3% on PC2, and these
-  peak times were **broadly spread across the day** (pooled circular standard
-  deviation ≈ 7 h): players differ widely in when their behaviour peaks. The
-  distribution is a single dispersed mode rather than two discrete clusters — a
-  two-component von Mises mixture was not preferred over one component for either
-  PC1 (ΔBIC = −15.7) or PC2 (ΔBIC = −15.4), with non-significant bootstrap
-  likelihood-ratio tests. One server (JP1) was excluded from the phase analyses
-  because of a daily maintenance shutdown. In contrast, ΔMMR carried almost no
+  N-weighted best period was 23.96 h for PC1 and 23.94 h for PC2, and the population playtime periodogram peaked at exactly 24.0 h on
+  every server. Per-player peak phases were individually significant for 14.2% of players on PC1 and 10.3% on PC2, and these peak times were
+  broadly spread across the day (pooled circular standard deviation ≈ 7 h):
+  players differ widely in when their behaviour peaks. The distribution is a
+  single dispersed mode rather than two discrete clusters — a two-component von
+  Mises mixture was not preferred over one component for either PC1 (ΔBIC = −15.7)
+  or PC2 (ΔBIC = −15.4). One server (JP1) ran a daily maintenance shutdown that
+  truncated its sampling window and produced a spurious morning cluster; we
+  excluded it from the phase analyses. In contrast, ΔMMR carried almost no
   circadian signal (0.3% of players FDR-significant). Behaviour is strongly
   time-of-day structured, with wide individual differences in phase; competitive
-  *success* is not. We discuss the interpretation and limits of inferring
-  chronotype from public match telemetry.
+  *success* is not. All
+  analysis code and the de-identified derived outputs underlying every figure are
+  openly available, and we discuss interpretation limits and the data-sharing
+  constraints of proprietary match telemetry.
 keywords:
   - circadian rhythms
   - chronotype
+  - behavioural rhythms
+  - open science
   - digital trace data
+  - online games
   - League of Legends
   - Lomb–Scargle periodogram
   - computational social science
-bibliography: references.bib
-csl: springer-basic-brackets.csl
+bibliography: ../references.bib
+csl: ../springer-basic-brackets.csl
 number-sections: true
 toc: false
 format:
@@ -66,20 +69,30 @@ format:
         \DeclareUnicodeCharacter{221D}{$\propto$}
         \DeclareUnicodeCharacter{2212}{$-$}
         \DeclareUnicodeCharacter{00B1}{$\pm$}
+        \usepackage{titling}
+        \pretitle{\begin{flushleft}\LARGE\bfseries}
+        \posttitle{\par\end{flushleft}\vskip 0.5em}
+        \preauthor{\begin{flushleft}\large}
+        \postauthor{\par\end{flushleft}}
+        \predate{\begin{flushleft}\large}
+        \postdate{\par\end{flushleft}}
+        \renewenvironment{abstract}{\small\begin{flushleft}\textbf{\abstractname}\end{flushleft}\quotation}{\endquotation}
   docx:
     toc: false
+    reference-doc: reference-leftalign.docx
 ---
 
 # Introduction
 
 Almost every measured aspect of human physiology and behaviour oscillates with a
-period of about 24 hours, driven by an endogenous circadian clock entrained to the
-local light–dark cycle [@roenneberg2007epidemiology]. These rhythms reach into
-cognition: attention, working memory, reaction time and executive control all show
-reliable time-of-day modulation [@schmidt2007time]. The *phase* of these rhythms
-differs from person to person. The morningness–eveningness dimension (colloquially
-"larks" versus "owls") is a stable trait [@horne1976self; @roenneberg2003life], and
-the distribution of chronotypes in a population is broad and roughly continuous
+period of about 24 hours, driven by an endogenous circadian clock that is
+entrained to the local light–dark cycle [@roenneberg2007epidemiology]. These
+rhythms reach into cognition: attention, working memory, reaction time and
+executive control all show reliable time-of-day modulation [@schmidt2007time].
+But the *phase* of these rhythms differs between people. The
+morningness–eveningness dimension (colloquially "larks" versus "owls") is a
+stable trait [@horne1976self; @roenneberg2003life], and the
+distribution of chronotypes in a population is broad and roughly continuous
 [@adan2012circadian].
 
 Chronotype matters for performance. When the timing of a demanding task is
@@ -90,9 +103,9 @@ schedules and that greater misalignment predicts lower grades. In elite sport,
 @facerchilds2015impact found that an athlete's peak performance time tracks their
 circadian phenotype, with intra-day swings as large as ~26%. In gamers with
 gaming disorder, eveningness has been linked to disrupted sleep and higher
-gaming-disorder risk [@hsu2024circadian]. Competitive gaming is itself a
-structured, trainable skill rather than mere reflex [@nagorsky2020structure], so
-the way a game is played is behaviour worth measuring.
+gaming-disorder risk
+[@hsu2024circadian], and competitive performance in esports is a structured,
+trainable skill set rather than mere reflex [@nagorsky2020structure].
 
 Online competitive gaming offers an unusually clean natural experiment for
 chronobiology at scale. Millions of timestamped, standardised, skill-graded
@@ -115,10 +128,7 @@ We test three questions:
 
 We address these with a within-subject spectral analysis of ~8,000 high-ranked
 players, replicated independently across 8 servers and combined by an N-weighted
-meta-analysis. The answers, in order, are yes, yes and no: play behaviour carries a
-strong daily rhythm, personal peak times vary widely across the population (a broad
-continuous spread rather than two discrete chronotype clusters), and competitive
-outcome carries no such rhythm at all.
+meta-analysis.
 
 # Methods
 
@@ -131,7 +141,7 @@ players who registered **new accounts at the start of a competitive season** (ac
 ranked history), followed across **one entire season**
 (21 January to November 2016) of default five-versus-five ranked Solo/Duo-queue
 play. Because every account enters ranked play at the same default matchmaking
-rating and is then observed continuously, the cohort offers a clean
+rating and is then observed continuously, the cohort offers an unusually clean
 within-subject view of each player's full activity and skill trajectory, the
 property our within-player periodogram and ΔMMR analyses depend on. Each match row
 carries the per-minute performance fields we reduce by PCA together with the
@@ -195,7 +205,7 @@ true circadian peak to be reported at 24.0 h rather than snapping to a
 neighbouring bin. Per-player periodograms were then **incoherently averaged**
 within each server–metric cell (averaging *power*, which is phase-blind), and the
 period of maximum mean power was recorded as that cell's best period. A population-level periodogram of raw activity
-(`TIMEPLAYED`) and of win rate was computed analogously over 6–48 h.
+(`TIMEPLAYED`) was computed analogously over 6–48 h.
 
 ## Phase estimation and multiple-testing control
 
@@ -242,11 +252,14 @@ assumption-light companion, we also summarised the same phases with
 phase-count-weighted circular kernel density estimates ($\kappa = 4$).
 
 One server, **JP1**, was excluded from all phase-based analyses (per-player peak
-phase, its FDR fractions, the modality fits and the kernel density) because of a
-daily maintenance shutdown (@fig-playvolume) that leaves its per-player peak
-phase unreliable. JP1 is retained in the period analysis, where the frequency of
-a rhythm is recoverable from gapped sampling, and in the play-volume figure. The
-phase analyses thus rest on 7 servers.
+phase, its FDR fractions, the modality fits and the kernel density). JP1 runs a
+daily maintenance shutdown of roughly 05:00–11:00 local time (@fig-playvolume),
+so the fixed 24 h sinusoid extrapolates each player's peak into hours that were
+never sampled; JP1 also returns an implausible 72–76% FDR-significant fraction,
+against 10–28% elsewhere. Its phase estimates are therefore unreliable. JP1 is
+retained in the period analysis, where the frequency of a rhythm is recoverable
+from gapped sampling, and in the play-volume figure, where it documents the gap.
+The phase analyses thus rest on 7 servers.
 
 ## Across-server meta-analysis and quality control
 
@@ -255,6 +268,17 @@ by the number of valid players, phase fractions by players analysed, and
 population metrics by games played. Implementation used NumPy [@harris2020numpy],
 SciPy [@virtanen2020scipy], pandas [@mckinney2010data] and Matplotlib
 [@hunter2007matplotlib].
+
+## Computational reproducibility
+
+The full workflow is script-based and deterministic at the level of published
+summary tables and figures. Server-level processing is run with
+`riot_analysis.py`, and cross-server synthesis and manuscript figures are run
+with `grand_analysis.py`. Intermediate and final outputs are written to the
+`results/` tree, and manuscript figures are generated from those tables rather
+than from manual plotting steps. The repository includes the Quarto source for
+the manuscript and rebuild commands so that text, statistics and figures can be
+regenerated from the released derived data products.
 
 ::: {.callout-note}
 ## Outlier handling
@@ -303,7 +327,7 @@ of individual peak phases reported in @sec-bimodality. This figure also exposes
 the maintenance-window gaps (chiefly JP1's) that motivate the phase-analysis
 exclusions below.
 
-![Play volume by hour of day on the eight servers (9.55 million games from the 8,000 analysed players). **(a)** Share of each server's games falling in each UTC hour; servers are coloured by UTC offset (light = west, dark = east) and the curves are displaced in time-zone order. **(b)** The same curves against local hour, after the fixed per-server UTC offset, collapsing onto a common evening-peaked schedule. **(c)** Each server's mean UTC play hour against its UTC offset; the fitted slope (−0.92) sits close to the −1 expected if all servers keep the same local schedule (solid line, drawn through the pooled local mean of 19.1 h). JP1's flat interval at 05:00–11:00 local, and the single missing hour on LA1 and LA2 (both 09:00–10:00 UTC), are daily server-maintenance windows rather than behaviour.](../results/GRAND/grand_play_volume_timezone.png){#fig-playvolume width=100%}
+![Play volume by hour of day on the eight servers (9.55 million games from the 8,000 analysed players). **(a)** Share of each server's games falling in each UTC hour; servers are coloured by UTC offset (light = west, dark = east) and the curves are displaced in time-zone order. **(b)** The same curves against local hour, after the fixed per-server UTC offset, collapsing onto a common evening-peaked schedule. **(c)** Each server's mean UTC play hour against its UTC offset; the fitted slope (−0.92) sits close to the −1 expected if all servers keep the same local schedule (solid line, drawn through the pooled local mean of 19.1 h). JP1's flat interval at 05:00–11:00 local, and the single missing hour on LA1 and LA2 (both 09:00–10:00 UTC), are daily server-maintenance windows rather than behaviour.](../../results/GRAND/grand_play_volume_timezone.png){#fig-playvolume width=100%}
 
 ## Behaviour is rhythmic; success is not {#sec-periods}
 
@@ -312,7 +336,7 @@ noise for outcome. For a single representative server (NA1), PC1 and PC2 each
 produce a clean spike at ~24 h above a flat background, whereas ΔMMR yields a
 broad, low, ragged spectrum with no dominant period (@fig-periodograms).
 
-![Incoherently averaged within-subject Lomb–Scargle periodograms for one server (NA1, 1,000 players). PC1 (left, peak 24.08 h) and PC2 (centre, 23.92 h) show sharp circadian spikes above a flat background; ΔMMR (right) is a weak, noisy spectrum with peak power roughly an order of magnitude smaller, its nominal 24.00 h peak barely rising above the noise.](../results/NA1/within_subject_periodograms.png){#fig-periodograms width=100%}
+![Incoherently averaged within-subject Lomb–Scargle periodograms for one server (NA1, 1,000 players). PC1 (left, peak 24.08 h) and PC2 (centre, 23.92 h) show sharp circadian spikes above a flat background; ΔMMR (right) is a weak, noisy spectrum with peak power roughly an order of magnitude smaller, its nominal 24.00 h peak barely rising above the noise.](../../results/NA1/within_subject_periodograms.png){#fig-periodograms width=100%}
 
 This pattern is consistent across all servers. The N-weighted best period is
 **23.96 h for PC1** (SEM 0.029) and **23.94 h for PC2** (SEM 0.020), both
@@ -329,17 +353,14 @@ weaker peak (@tbl-periods).
 : N-weighted within-subject best periods. {#tbl-periods}
 
 The fraction of *individually* FDR-significant players tells the same story
-(excluding JP1): **14.2%** of players have a significant
+(excluding JP1; see @sec-bimodality): **14.2%** of players have a significant
 ~24 h rhythm in PC1 and **10.3%** in PC2, but only **0.3%** do in ΔMMR (24 of
 7,000 players). Behaviour is strongly clock-locked; the *outcome* of competition
-is clock-agnostic. Per-server game counts and significant-player fractions are
-given in Supplementary Table S1, and the across-server summary in Supplementary
-Figure S1.
+is clock-agnostic.
 
-For reference, the population-level periodograms behave as expected: with the
-24 h-anchored grid the raw activity periodogram (`TIMEPLAYED`) peaks at **exactly
-24.0 h on every one of the eight servers**, and raw win rate peaks near 24 h on
-average (N-weighted 23.6 h, though noisier across servers).
+For reference, the population-level periodogram of raw activity (`TIMEPLAYED`)
+behaves as expected: with the 24 h-anchored grid it peaks at **exactly 24.0 h on
+every one of the eight servers**.
 
 ## What the components mean {#sec-pca}
 
@@ -351,9 +372,9 @@ leading component (N-weighted 0.29), reinforcing that the dominant behavioural
 axes describe *how* a game is played rather than whether it is won.
 
 ::: {#fig-pca layout-ncol=1}
-![Performance PCA: PC1 is an all-positive output/engagement axis (~62% variance); PC2 contrasts economy against time-dead (~19%).](../results/GRAND/grand_performance_pca_loadings.png){#fig-pca-perf}
+![Performance PCA: PC1 is an all-positive output/engagement axis (~62% variance); PC2 contrasts economy against time-dead (~19%).](../../results/GRAND/grand_performance_pca_loadings.png){#fig-pca-perf}
 
-![Success-aware PCA (win rate included): win rate loads only modestly on the leading components.](../results/GRAND/grand_success_aware_pca_loadings.png){#fig-pca-success}
+![Success-aware PCA (win rate included): win rate loads only modestly on the leading components.](../../results/GRAND/grand_success_aware_pca_loadings.png){#fig-pca-success}
 
 N-weighted PCA loadings across servers; whiskers show between-server spread.
 :::
@@ -395,7 +416,7 @@ threshold, so the pooled ΔMMR cell is empty.
   bootstrap likelihood-ratio test is non-significant: no evidence for two discrete
   clusters. {#tbl-bimodality}
 
-![Pooled circular phase fits. For PC1 (top) and PC2 (bottom): histograms of FDR-significant local peak hours with the one-component fit (dashed) and two-component fit (solid; dotted components), in hour-domain (left) and polar (right) views. The single von Mises tracks the data as well as the mixture; both metrics show one broad, dispersed mode rather than two clusters, and BIC and a bootstrap likelihood-ratio test do not support a second component. JP1 is excluded.](../results/GRAND/grand_pooled_circular_bimodality_fits.png){#fig-bimodality width=100%}
+![Pooled circular phase fits. For PC1 (top) and PC2 (bottom): histograms of FDR-significant local peak hours with the one-component fit (dashed) and two-component fit (solid; dotted components), in hour-domain (left) and polar (right) views. The single von Mises tracks the data as well as the mixture; both metrics show one broad, dispersed mode rather than two clusters, and BIC and a bootstrap likelihood-ratio test do not support a second component. JP1 is excluded (see text).](../../results/GRAND/grand_pooled_circular_bimodality_fits.png){#fig-bimodality width=100%}
 
 The per-server tally agrees: across the retained servers, FDR-significant PC1
 phases split 816 (one-component-preferred) to 176 (two-component-preferred) and
@@ -406,51 +427,30 @@ landscape: the phase-count-weighted circular density of PC1 peaks is a single
 broad concentration in the late evening (weighted peak 23.7 h) and PC2 a single
 broad concentration around midday (12.5 h), each spread across most of the clock.
 
-This wide spread is not inherited from the play-time schedule. Play volume itself
-follows one evening-peaked curve on every server once local time is used
-(@sec-playvolume), and the distribution of players' preferred play hours is
-likewise single-peaked, near 19.6 h (Supplementary Section 3, Figure S2). The
-behavioural phases scatter far more widely than the hours players choose to log
-on, so the individual differences in phase are a property of behaviour, not of
-exposure.
+This spread is not a by-product of *play density* — the time-of-day variation in
+how many games a player logs. The sinusoid is fitted to each player's per-game
+behavioural score, not to their game counts: density sets how *precisely* a
+player's phase is estimated, not the value being fitted. Two checks confirm it. A
+shared population time-of-day curve, read out at each player's own play hours,
+would pile every fitted peak at that curve's peak and give a *narrow*
+distribution; the observed ≈7 h spread is the opposite. And among FDR-significant
+players the circular correlation between a player's mean play hour and their
+fitted behavioural peak is near zero (PC1 $r = 0.02$; PC2 $r = 0.16$):
+players peak far from when they play, over ~230 days of well-sampled coverage.
+ΔMMR settles the point: measured on the same games, hours and densities, it
+shows no rhythm at all, which a generic sampling artifact could not produce.
 
-Nor can the rhythm be a by-product of *play density*, the time-of-day variation
-in how many games a player logs. The sinusoid is fitted to each player's per-game
-behavioural score (PC1, PC2), not to their game counts: how often a
-player is online at a given hour sets how *precisely* their phase is estimated,
-not the value being fitted. Two checks show this. First, were the
-apparent rhythm merely a shared population-level time-of-day curve read out at
-each player's own play hours, every fitted peak would land at that curve's peak
-and the phase distribution would be *narrow*; the observed ≈7 h spread is the
-opposite, and a common curve cannot manufacture it. Second, among
-FDR-significant players the circular correlation between a player's mean play hour
-and their fitted behavioural peak is near zero (PC1 $r = 0.02$; PC2
-$r = 0.16$, $n = 992$ and $719$): players peak *far* from when they happen to
-play. Coverage is not the weak point either — each retained player spans ~230
-days and thousands of games, sampling every hour repeatedly, so the 24 h fit is
-well constrained (unlike JP1's censored window). ΔMMR settles the point: it is
-measured on the same games, at the same hours and densities, yet shows
-no rhythm at all (@sec-periods), which a generic play-density or sampling
-artifact could not produce.
+**The apparent two-cluster structure was a JP1 artifact.** With JP1's phases
+included, the pooled fits instead prefer two components ($\Delta\text{BIC} =
++17$ for PC1, $+28$ for PC2) with a morning "lark" mode near 7–9 h. That morning
+mode sits inside JP1's daily 05:00–11:00 maintenance shutdown (@fig-playvolume),
+where no games are played: the 24 h sinusoid extrapolates each JP1 player's peak
+into hours that were never sampled. JP1 alone supplies 72–76% of its players as
+FDR-significant and 42–52% of the pooled phases, so it dominates the pooled fit.
+Removing JP1 (Methods) removes the spurious clusters and leaves the single broad
+distribution above.
 
-We therefore report the population as showing wide individual variation in phase
-— one broad, dispersed mode per metric — rather than two discrete chronotypes.
-
-![Phase-count-weighted circular kernel density of FDR-significant peak hours (κ = 4), with 95% across-server bands (JP1 excluded). Each metric shows a single broad concentration — PC1 in the late evening, PC2 around midday — spread across most of the day.](../results/GRAND/grand_pc_peak_density.png){#fig-density width=100%}
-
-## When do players actually win? {#sec-winrate}
-
-Although individual skill *change* shows no rhythm, the aggregate win rate does
-vary with local hour (@fig-winrate). Pooled across servers, win rate is highest in
-the early-morning hours (~03:00–06:00 local) and lowest through the afternoon and
-early evening. The absolute swing is small (raw win rate moves only between about
-0.483 and 0.491), and because this is computed over *whichever* players are
-online at each hour, it reflects both who plays when (composition) and any
-genuine time-of-day effect, and so does not isolate a within-person performance
-curve. We therefore
-treat it as descriptive context rather than a chronotype result.
-
-![N-weighted win rate by local hour. **Left:** z-scored win-rate shape with across-server band, peaking in the early morning. **Right:** raw game-count-weighted win rate (note the narrow 0.483–0.491 range).](../results/GRAND/grand_win_rate_by_local_hour.png){#fig-winrate width=100%}
+![Phase-count-weighted circular kernel density of FDR-significant peak hours (κ = 4), with 95% across-server bands (JP1 excluded). Each metric shows a single broad concentration — PC1 in the late evening, PC2 around midday — spread across most of the day.](../../results/GRAND/grand_pc_peak_density.png){#fig-density width=100%}
 
 # Discussion
 
@@ -475,23 +475,35 @@ phase — the hour at which a player's in-game output peaks — which is not the
 physiological dim-light melatonin onset, and is shaped by chronotype together with
 school, work and social schedules.
 
+An apparent bimodality in an earlier pass of this analysis turned out to be a
+sampling artifact. A single server, JP1, contributed 42–52% of the pooled
+significant phases and, on its own, produced a morning "lark" cluster; excluding
+it removed the second mode entirely. JP1 runs a daily maintenance shutdown
+(~05:00–11:00 local) during which no games are recorded (@fig-playvolume), so the
+fitted 24 h sinusoid extrapolates each player's peak into hours that were never
+sampled, manufacturing a morning cluster exactly where the data are missing. The
+lesson generalises: in always-on behavioural telemetry, platform downtime imposes
+structured, fixed-clock gaps that can masquerade as biology, and phase estimates
+are especially vulnerable because a peak can be placed in an unsampled window. We
+flag and exclude JP1 from the phase analyses for this reason.
+
 Third, **competitive success is essentially time-invariant**. ΔMMR shows no
 within-subject circadian rhythm (0.3% FDR-significant; no server testable for
 modality), even though the very same players, on the very same games, show clear
 rhythms in *how* they play. The matchmaking system is designed to hold win rate
 near 50% by pairing players of similar skill, which mechanically suppresses any
-outcome rhythm; the small aggregate win-rate variation by hour (@sec-winrate) is
-better explained by *who* is online than by a within-person performance curve.
-Timescale is what separates the two results: on this very cohort, *across*-season
+outcome rhythm; and because both teams in a match share the same server clock, a
+pure time-of-day effect cancels within every game and cannot move the result.
+The two timescales behave differently: on this very cohort, *across*-season
 skill change is highly structured and predictable (early-season learning rate
 forecasts end-of-season rating [@aung2018predicting]), yet the *within*-day timing
-of skill change leaves no detectable circadian mark. Indeed, prior analyses of
+of skill change leaves no detectable circadian mark. Prior analyses of
 this same dataset deliberately set MMR aside as a match-to-match performance
 measure, precisely because it is governed by the (opaque, win/loss-weighted)
 matchmaking algorithm rather than by momentary individual play [@vardal2022mind];
 our null is the chronobiological counterpart of that caution. For a competitive
-player this cuts two ways: playing *style* varies with the time of day, but the
-matchmaking ladder largely cancels its effect on measured skill.
+player the practical implication is twofold: playing *style* varies with the time
+of day, but the matchmaking ladder largely cancels its effect on measured skill.
 
 ## Limitations
 
@@ -501,9 +513,11 @@ not match the general public. Phases are inferred from a fitted 24 h sinusoid on
 irregular match times rather than from continuous physiological recording. Local
 hour uses a single per-server UTC offset and does not model daylight-saving
 transitions or the within-region spread of true time zones; the residual
-across-server spread this leaves is 1.12 h (@sec-playvolume). We excluded JP1
-from the phase analyses owing to its daily maintenance shutdown, and the phase
-results should be read as conditional on that choice. The
+across-server spread this leaves is 1.12 h (@sec-playvolume). Daily maintenance
+windows remove a few hours of exposure from JP1, LA1 and LA2 (@fig-playvolume),
+which censors those hours rather than sampling them; because this most strongly
+corrupts phase estimation, we excluded JP1 (the largest gap) from the phase
+analyses, and the phase results should be read as conditional on that choice. The
 one- versus two-component von Mises comparison is the simplest test of clustering
 and does not exclude richer multi-modal or continuous structure; a single broad
 mode is the most it supports here. The parametric bootstrap tests how often an
@@ -525,7 +539,8 @@ human chronobiology, and the analysis pipeline here (within-subject
 Lomb–Scargle, FDR-controlled phase estimation, information-criterion-compared
 circular models, and parametric-bootstrap model checking, meta-analysed across
 servers) is a reusable template for similar questions in other large behavioural
-datasets.
+datasets — provided, as JP1 shows, that structured gaps from platform downtime
+are screened before phases are pooled.
 
 # Declarations {.unnumbered}
 
@@ -539,7 +554,7 @@ direct interaction with human participants.
 
 Not applicable.
 
-## Availability of data and materials
+## Data accessibility
 
 The analysis code (`riot_analysis.py`, `grand_analysis.py`) and the de-identified
 derived outputs that underlie every figure and statistic in this paper (the
@@ -555,13 +570,13 @@ the terms governing the longitudinal research cohort of Aung et al.
 available. We do not redistribute them, and the pipeline rebuilds a local DuckDB
 cache from the converted store on demand.
 
-## Supplementary information
+## Reproducibility and code availability
 
-A supplementary document (`lol_circadian_rhythms_supplement.pdf`) reports the
-per-server data summary (Table S1), the across-server within-subject rhythm
-summary (Figure S1), and a control showing that the play-time schedule is
-single-peaked (Section 3, Figure S2, Table S2). It is available in the same
-repository.
+The repository contains script-level analysis entry points, generated result
+tables, and manuscript source. A full manuscript rebuild (HTML/PDF/DOCX) is run
+with `quarto render paper/journal_variants/lol_circadian_rhythms_rsos.qmd`.
+Core analysis artifacts in `results/` map directly onto reported statistics,
+tables and figure panels.
 
 ## Competing interests
 

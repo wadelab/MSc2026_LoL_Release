@@ -18,6 +18,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.colors import LinearSegmentedColormap, Normalize
 from scipy.stats import vonmises
 
 from riot_analysis import COLORS, configure_plot_style, fit_vonmises_1comp, fit_vonmises_2comp, save_table, style_axes
@@ -31,12 +32,24 @@ GRAND_DIR_NAME = "GRAND"
 # its spurious DeltaMMR period is still screened by drop_period_outliers().
 ANALYSIS_PLATFORMS = ["BR1", "EUN1", "EUW1", "JP1", "LA1", "LA2", "NA1", "OC1"]
 
+# Servers excluded from the phase-based analyses (per-player peak phase, its
+# FDR fractions, the circular modality/density fits and the pooled bimodality
+# test). JP1 runs a daily maintenance shutdown (~05:00-11:00 local, visible in
+# the play-volume figure): the 24 h sinusoid then extrapolates each player's
+# peak phase into hours that were never sampled, so JP1's phases are unreliable.
+# JP1 is kept in the period analysis (frequency survives gapped sampling and is
+# outlier-screened) and in the play-volume figure (where it documents the gap).
+PHASE_ANALYSIS_EXCLUDE = ["JP1"]
+
 COMPONENTS_TO_PLOT = ["PC1", "PC2", "PC3"]
 METRIC_ORDER = {"PC1": 0, "PC2": 1, "DeltaMMR": 2}
 PC_DENSITY_METRICS = ["PC1", "PC2"]
 CIRCULAR_DENSITY_KAPPA = 4.0
 CIRCULAR_DENSITY_GRID_POINTS = 240
 CIRCULAR_DENSITY_MIN_PHASES = 20
+CIRCULAR_BOOTSTRAP_REPLICATES = 1000
+CIRCULAR_BOOTSTRAP_SEED = 20260611
+PLAY_TIME_BOOTSTRAP_SEED = 20260707
 SUMMARY_COLUMNS = [
     "platform",
     "target_best_period",
@@ -630,8 +643,10 @@ def pooled_circular_bimodality_tests(
     server_dirs: list[Path],
     metrics: list[str] | None = None,
     min_phases: int = CIRCULAR_DENSITY_MIN_PHASES,
+    bootstrap_replicates: int = CIRCULAR_BOOTSTRAP_REPLICATES,
+    bootstrap_seed: int = CIRCULAR_BOOTSTRAP_SEED,
 ) -> pd.DataFrame:
-    """Compare one- vs two-component circular models on pooled significant phases."""
+    """Compare circular models and bootstrap the pooled likelihood improvement."""
 
     metrics = metrics or PC_DENSITY_METRICS
     pooled_phases, inclusion = load_pooled_significant_phases(
@@ -641,7 +656,7 @@ def pooled_circular_bimodality_tests(
     )
     rows = []
 
-    for metric in metrics + ["DeltaMMR"]:
+    for metric_index, metric in enumerate(metrics + ["DeltaMMR"]):
         metric_inclusion = inclusion[inclusion["metric"] == metric]
         phase_values = pooled_phases.loc[pooled_phases["metric"] == metric, "phase_local_peak"].to_numpy(dtype=float)
         contributing_servers = int(metric_inclusion["included"].sum()) if not metric_inclusion.empty else 0
@@ -663,7 +678,20 @@ def pooled_circular_bimodality_tests(
         theta = (phase_values / 24.0) * 2.0 * np.pi
         vm1 = fit_vonmises_1comp(theta)
         vm2 = fit_vonmises_2comp(theta)
+        delta_loglik = vm2["loglik"] - vm1["loglik"]
+        likelihood_ratio = 2.0 * delta_loglik
+        delta_aic = vm1["aic"] - vm2["aic"]
         delta_bic = vm1["bic"] - vm2["bic"]
+        bootstrap = parametric_bootstrap_likelihood_ratio(
+            theta,
+            null_fit=vm1,
+            observed_likelihood_ratio=likelihood_ratio,
+            replicates=bootstrap_replicates,
+            seed=bootstrap_seed + metric_index,
+        )
+        bootstrap["bootstrap_exceedance_summary"] = (
+            f"{bootstrap['bootstrap_lr_exceedances']} / {bootstrap['bootstrap_replicates']}"
+        )
 
         rows.append(
             {
@@ -673,9 +701,17 @@ def pooled_circular_bimodality_tests(
                 "n_phases": int(len(phase_values)),
                 "status": "fit",
                 "preferred": "2-component" if delta_bic > 0 else "1-component",
+                "vm1_loglik": vm1["loglik"],
+                "vm2_loglik": vm2["loglik"],
+                "delta_loglik_2_minus_1": delta_loglik,
+                "likelihood_ratio": likelihood_ratio,
+                "vm1_aic": vm1["aic"],
+                "vm2_aic": vm2["aic"],
+                "delta_aic_1_minus_2": delta_aic,
                 "vm1_bic": vm1["bic"],
                 "vm2_bic": vm2["bic"],
                 "delta_bic_1_minus_2": delta_bic,
+                **bootstrap,
                 "vm1_peak_h": float((vm1["mu"] / (2.0 * np.pi)) * 24.0),
                 "vm1_kappa": vm1["kappa"],
                 "component_1_h": float((vm2["mu1"] / (2.0 * np.pi)) * 24.0),
@@ -689,6 +725,487 @@ def pooled_circular_bimodality_tests(
         )
 
     return sort_metric_table(pd.DataFrame(rows))
+
+
+def parametric_bootstrap_likelihood_ratio(
+    theta_vals: np.ndarray,
+    null_fit: dict[str, float],
+    observed_likelihood_ratio: float,
+    replicates: int,
+    seed: int,
+) -> dict[str, float | int]:
+    """Estimate a mixture-model comparison p-value under a one-component null."""
+
+    if replicates < 1:
+        return {
+            "bootstrap_replicates": 0,
+            "bootstrap_seed": seed,
+            "bootstrap_lr_exceedances": 0,
+            "bootstrap_lrt_p_value": np.nan,
+            "bootstrap_lr_95pct": np.nan,
+            "bootstrap_lr_max": np.nan,
+        }
+
+    rng = np.random.default_rng(seed)
+    null_likelihood_ratios = np.empty(replicates, dtype=float)
+    for index in range(replicates):
+        simulated = rng.vonmises(null_fit["mu"], null_fit["kappa"], size=len(theta_vals))
+        simulated_vm1 = fit_vonmises_1comp(simulated)
+        simulated_vm2 = fit_vonmises_2comp(simulated)
+        null_likelihood_ratios[index] = max(
+            0.0,
+            2.0 * (simulated_vm2["loglik"] - simulated_vm1["loglik"]),
+        )
+
+    exceedances = int(np.sum(null_likelihood_ratios >= observed_likelihood_ratio))
+    return {
+        "bootstrap_replicates": replicates,
+        "bootstrap_seed": seed,
+        "bootstrap_lr_exceedances": exceedances,
+        "bootstrap_lrt_p_value": float((exceedances + 1) / (replicates + 1)),
+        "bootstrap_lr_95pct": float(np.quantile(null_likelihood_ratios, 0.95)),
+        "bootstrap_lr_max": float(np.max(null_likelihood_ratios)),
+    }
+
+
+def load_play_volume_by_hour(server_dirs: list[Path]) -> pd.DataFrame:
+    """Pool each server's hour-of-day game counts (UTC and local)."""
+
+    frames = []
+    for server_dir in server_dirs:
+        path = server_dir / f"play_volume_by_hour_{server_dir.name}.csv"
+        if not path.exists():
+            continue
+        frames.append(pd.read_csv(path))
+    if not frames:
+        return pd.DataFrame()
+    return pd.concat(frames, ignore_index=True)
+
+
+def _circular_mean_hour(hours: np.ndarray, weights: np.ndarray) -> tuple[float, float]:
+    """Weighted circular mean hour in [0, 24) and its mean resultant length."""
+
+    theta = np.asarray(hours, dtype=float) * (2.0 * np.pi / 24.0)
+    w = np.asarray(weights, dtype=float)
+    cos_sum = float((w * np.cos(theta)).sum())
+    sin_sum = float((w * np.sin(theta)).sum())
+    mu = np.mod(np.arctan2(sin_sum, cos_sum), 2.0 * np.pi) * (24.0 / (2.0 * np.pi))
+    rbar = float(np.hypot(cos_sum, sin_sum) / w.sum())
+    return float(mu), rbar
+
+
+def _circular_sd_hours(hours: np.ndarray) -> tuple[float, float]:
+    """Unweighted circular standard deviation (hours) and resultant length."""
+
+    theta = np.asarray(hours, dtype=float) * (2.0 * np.pi / 24.0)
+    resultant = float(np.hypot(np.cos(theta).mean(), np.sin(theta).mean()))
+    resultant = float(np.clip(resultant, 1e-12, 1.0))
+    sd = float(np.sqrt(-2.0 * np.log(resultant)) * (24.0 / (2.0 * np.pi)))
+    return sd, resultant
+
+
+def play_volume_timezone_summary(play_volume: pd.DataFrame) -> pd.DataFrame:
+    """Per-server play-hour centre in UTC and local time.
+
+    The across-server dispersion of these centres, reported in the attrs, is the
+    test that the fixed per-server UTC offsets align the servers: it should
+    collapse once the correction is applied.
+    """
+
+    if play_volume.empty:
+        return pd.DataFrame()
+
+    rows = []
+    for platform, group in play_volume.groupby("platform", sort=False):
+        counts = group["n_games"].to_numpy(dtype=float)
+        mean_utc, rbar = _circular_mean_hour(group["utc_hour"].to_numpy(), counts)
+        mean_local, _ = _circular_mean_hour(group["local_hour"].to_numpy(), counts)
+        peak = group.loc[group["n_games"].idxmax()]
+        rows.append(
+            {
+                "platform": platform,
+                "utc_offset_hours": int(group["utc_offset_hours"].iloc[0]),
+                "n_games": int(counts.sum()),
+                "mean_hour_utc": mean_utc,
+                "mean_hour_local": mean_local,
+                "peak_hour_utc": int(peak["utc_hour"]),
+                "peak_hour_local": int(peak["local_hour"]),
+                "rbar": rbar,
+            }
+        )
+
+    summary = pd.DataFrame(rows).sort_values("utc_offset_hours").reset_index(drop=True)
+
+    sd_mean_utc, r_mean_utc = _circular_sd_hours(summary["mean_hour_utc"].to_numpy())
+    sd_mean_local, r_mean_local = _circular_sd_hours(summary["mean_hour_local"].to_numpy())
+    sd_peak_utc, _ = _circular_sd_hours(summary["peak_hour_utc"].to_numpy())
+    sd_peak_local, _ = _circular_sd_hours(summary["peak_hour_local"].to_numpy())
+
+    # Regress the unwrapped UTC play-hour centre on offset; a common local
+    # schedule predicts slope -1.
+    offsets = summary["utc_offset_hours"].to_numpy(dtype=float)
+    unwrapped = np.unwrap(summary["mean_hour_utc"].to_numpy(dtype=float) * (2.0 * np.pi / 24.0))
+    unwrapped *= 24.0 / (2.0 * np.pi)
+    slope, intercept = np.polyfit(offsets, unwrapped, 1)
+
+    summary.attrs.update(
+        {
+            "sd_mean_hour_utc": sd_mean_utc,
+            "sd_mean_hour_local": sd_mean_local,
+            "sd_peak_hour_utc": sd_peak_utc,
+            "sd_peak_hour_local": sd_peak_local,
+            "resultant_utc": r_mean_utc,
+            "resultant_local": r_mean_local,
+            "offset_slope": float(slope),
+            "offset_intercept": float(intercept),
+            "offset_r": float(np.corrcoef(offsets, unwrapped)[0, 1]),
+            "pooled_mean_hour_local": _circular_mean_hour(
+                play_volume["local_hour"].to_numpy(),
+                play_volume["n_games"].to_numpy(dtype=float),
+            )[0],
+        }
+    )
+    return summary
+
+
+def _wrap_hours(hours: np.ndarray, values: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Close a 24 h cycle so the curve joins at midnight."""
+
+    order = np.argsort(hours)
+    h, v = hours[order], values[order]
+    return np.append(h, h[0] + 24.0), np.append(v, v[0])
+
+
+def plot_play_volume_timezone(
+    play_volume: pd.DataFrame,
+    summary: pd.DataFrame,
+    output_path: Path,
+) -> None:
+    """Play volume by hour of day, before and after the local-time correction."""
+
+    if play_volume.empty or summary.empty:
+        return
+
+    # Offset is an ordered magnitude, so servers take a single-hue sequential
+    # ramp (west = light, east = dark) rather than eight categorical hues.
+    ramp = LinearSegmentedColormap.from_list(
+        "server_offset", ["#a8dadc", COLORS["secondary"], COLORS["primary"], "#0b1b2b"]
+    )
+    offsets = summary["utc_offset_hours"].to_numpy(dtype=float)
+    norm = Normalize(vmin=offsets.min(), vmax=offsets.max())
+    colour_of = {row.platform: ramp(norm(row.utc_offset_hours)) for row in summary.itertuples()}
+
+    fig, axes = plt.subplots(1, 3, figsize=(16.5, 5.0))
+
+    peak_share = 0.0
+    for panel, (ax, hour_col) in enumerate(zip(axes[:2], ["utc_hour", "local_hour"])):
+        for row in summary.itertuples():
+            group = play_volume[play_volume["platform"] == row.platform]
+            h, v = _wrap_hours(
+                group[hour_col].to_numpy(dtype=float),
+                100.0 * group["fraction"].to_numpy(dtype=float),
+            )
+            peak_share = max(peak_share, float(v.max()))
+            ax.plot(
+                h,
+                v,
+                color=colour_of[row.platform],
+                linewidth=2.0,
+                label=f"{row.platform} (UTC{row.utc_offset_hours:+d})" if panel == 0 else None,
+            )
+        ax.set_xlim(0, 24)
+        ax.set_xticks(np.arange(0, 25, 4))
+        ax.set_xlabel("UTC hour" if panel == 0 else "Local hour")
+        style_axes(ax, grid_axis="y")
+
+    axes[0].set_ylabel("Share of a server's games (%)")
+    axes[1].set_ylabel("")
+    axes[1].sharey(axes[0])
+    # Headroom keeps the legend and SD annotations clear of the curves.
+    axes[0].set_ylim(0, 1.38 * peak_share)
+    axes[0].legend(frameon=False, fontsize=8, ncol=2, loc="upper left")
+
+    label_box = {"facecolor": "white", "edgecolor": "none", "alpha": 0.85, "pad": 3.0}
+    axes[0].text(
+        0.98,
+        0.96,
+        f"across-server SD\nof mean hour\n{summary.attrs['sd_mean_hour_utc']:.2f} h",
+        transform=axes[0].transAxes,
+        ha="right",
+        va="top",
+        fontsize=9,
+        color=COLORS["ink"],
+        bbox=label_box,
+    )
+    axes[1].text(
+        0.03,
+        0.96,
+        f"across-server SD\nof mean hour\n{summary.attrs['sd_mean_hour_local']:.2f} h",
+        transform=axes[1].transAxes,
+        ha="left",
+        va="top",
+        fontsize=9,
+        color=COLORS["accent"],
+        fontweight="bold",
+        bbox=label_box,
+    )
+
+    ax = axes[2]
+    unwrapped = np.unwrap(summary["mean_hour_utc"].to_numpy(dtype=float) * (2.0 * np.pi / 24.0))
+    unwrapped *= 24.0 / (2.0 * np.pi)
+    grid = np.linspace(offsets.min() - 1.0, offsets.max() + 1.0, 50)
+    ax.plot(
+        grid,
+        summary.attrs["offset_intercept"] + summary.attrs["offset_slope"] * grid,
+        color=COLORS["muted"],
+        linestyle="--",
+        linewidth=1.4,
+        label=f"fit (slope {summary.attrs['offset_slope']:.2f})",
+    )
+    ax.plot(
+        grid,
+        summary.attrs["pooled_mean_hour_local"] - grid,
+        color=COLORS["accent"],
+        linewidth=1.6,
+        label="predicted (slope −1)",
+    )
+    for row in summary.itertuples():
+        ax.scatter(
+            row.utc_offset_hours,
+            unwrapped[row.Index],
+            s=70,
+            color=colour_of[row.platform],
+            edgecolor="white",
+            linewidth=1.2,
+            zorder=3,
+        )
+        ax.annotate(
+            row.platform,
+            (row.utc_offset_hours, unwrapped[row.Index]),
+            textcoords="offset points",
+            xytext=(7, 4),
+            fontsize=8.5,
+            color=COLORS["ink"],
+        )
+    ax.set_xlabel("Server UTC offset (h)")
+    ax.set_ylabel("Mean play hour, UTC (unwrapped)")
+    ax.legend(frameon=False, fontsize=8.5, loc="upper right")
+    style_axes(ax, grid_axis="both")
+
+    for ax, label in zip(axes, "abc"):
+        ax.set_title(f"{label})", loc="left", fontsize=13, fontweight="bold", color=COLORS["ink"])
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=220, bbox_inches="tight")
+    plt.close(fig)
+
+
+def load_pooled_play_time_chronotypes(server_dirs: list[Path]) -> pd.DataFrame:
+    """Pool per-server per-player preferred play hours (FDR-significant players)."""
+
+    rows = []
+    for server_dir in server_dirs:
+        path = server_dir / f"play_time_chronotypes_{server_dir.name}.csv"
+        if not path.exists():
+            continue
+        table = pd.read_csv(path)
+        if "fdr_significant" in table.columns:
+            table = table[table["fdr_significant"].astype(bool)]
+        hours = pd.to_numeric(table.get("mean_hour_local"), errors="coerce").dropna()
+        for value in hours.to_numpy(dtype=float) % 24.0:
+            rows.append({"platform": server_dir.name, "mean_hour_local": float(value)})
+    return pd.DataFrame(rows)
+
+
+def play_time_chronotype_bimodality_test(
+    pooled_chronotypes: pd.DataFrame,
+    bootstrap_replicates: int = CIRCULAR_BOOTSTRAP_REPLICATES,
+    bootstrap_seed: int = PLAY_TIME_BOOTSTRAP_SEED,
+    min_players: int = CIRCULAR_DENSITY_MIN_PHASES,
+) -> pd.DataFrame:
+    """One- vs two-component circular fit for the pooled preferred play hours.
+
+    Mirrors `pooled_circular_bimodality_tests` (BIC/AIC plus a parametric
+    bootstrap likelihood-ratio check) but on behavioural play-time chronotypes.
+    """
+
+    hours = pooled_chronotypes.get("mean_hour_local")
+    hours = pd.to_numeric(hours, errors="coerce").dropna().to_numpy(dtype=float) if hours is not None else np.array([])
+    n_servers = int(pooled_chronotypes["platform"].nunique()) if not pooled_chronotypes.empty else 0
+
+    if len(hours) < min_players:
+        return pd.DataFrame(
+            [
+                {
+                    "metric": "PlayTime",
+                    "n_servers": n_servers,
+                    "n_players": int(len(hours)),
+                    "status": "skipped",
+                    "reason": f"fewer than {min_players} pooled players",
+                    "min_players": min_players,
+                }
+            ]
+        )
+
+    theta = (hours / 24.0) * 2.0 * np.pi
+    vm1 = fit_vonmises_1comp(theta)
+    vm2 = fit_vonmises_2comp(theta)
+    delta_loglik = vm2["loglik"] - vm1["loglik"]
+    likelihood_ratio = 2.0 * delta_loglik
+    delta_bic = vm1["bic"] - vm2["bic"]
+    bootstrap = parametric_bootstrap_likelihood_ratio(
+        theta,
+        null_fit=vm1,
+        observed_likelihood_ratio=likelihood_ratio,
+        replicates=bootstrap_replicates,
+        seed=bootstrap_seed,
+    )
+    bootstrap["bootstrap_exceedance_summary"] = (
+        f"{bootstrap['bootstrap_lr_exceedances']} / {bootstrap['bootstrap_replicates']}"
+    )
+
+    return pd.DataFrame(
+        [
+            {
+                "metric": "PlayTime",
+                "n_servers": n_servers,
+                "n_players": int(len(hours)),
+                "status": "fit",
+                "preferred": "2-component" if delta_bic > 0 else "1-component",
+                "vm1_loglik": vm1["loglik"],
+                "vm2_loglik": vm2["loglik"],
+                "delta_loglik_2_minus_1": delta_loglik,
+                "likelihood_ratio": likelihood_ratio,
+                "vm1_aic": vm1["aic"],
+                "vm2_aic": vm2["aic"],
+                "delta_aic_1_minus_2": vm1["aic"] - vm2["aic"],
+                "vm1_bic": vm1["bic"],
+                "vm2_bic": vm2["bic"],
+                "delta_bic_1_minus_2": delta_bic,
+                **bootstrap,
+                "vm1_peak_h": float((vm1["mu"] / (2.0 * np.pi)) * 24.0),
+                "vm1_kappa": vm1["kappa"],
+                "component_1_h": float((vm2["mu1"] / (2.0 * np.pi)) * 24.0),
+                "component_2_h": float((vm2["mu2"] / (2.0 * np.pi)) * 24.0),
+                "component_1_weight": vm2["pi1"],
+                "component_2_weight": vm2["pi2"],
+                "component_1_kappa": vm2["kappa1"],
+                "component_2_kappa": vm2["kappa2"],
+                "min_players": min_players,
+            }
+        ]
+    )
+
+
+def plot_play_time_chronotype(
+    pooled_chronotypes: pd.DataFrame,
+    play_time_bimodality: pd.DataFrame,
+    output_path: Path,
+) -> None:
+    """Save the pooled play-time chronotype distribution with von Mises fits.
+
+    Matches the look of `plot_pooled_circular_bimodality_fits`: an hour-domain
+    histogram with one- and two-component overlays (left) and a polar view
+    (right).
+    """
+
+    if pooled_chronotypes.empty or play_time_bimodality.empty:
+        return
+    row = play_time_bimodality.iloc[0]
+    if row.get("status") != "fit":
+        return
+
+    hours = pd.to_numeric(pooled_chronotypes["mean_hour_local"], errors="coerce").dropna().to_numpy(dtype=float)
+    theta_data = (hours / 24.0) * 2.0 * np.pi
+    x_hours = np.linspace(0.0, 24.0, 1000)
+    x_theta = (x_hours / 24.0) * 2.0 * np.pi
+    hour_scale = 2.0 * np.pi / 24.0
+
+    vm1_theta = vonmises.pdf(x_theta, float(row["vm1_kappa"]), loc=(float(row["vm1_peak_h"]) / 24.0) * 2.0 * np.pi)
+    component_1_theta = float(row["component_1_weight"]) * vonmises.pdf(
+        x_theta, float(row["component_1_kappa"]), loc=(float(row["component_1_h"]) / 24.0) * 2.0 * np.pi
+    )
+    component_2_theta = float(row["component_2_weight"]) * vonmises.pdf(
+        x_theta, float(row["component_2_kappa"]), loc=(float(row["component_2_h"]) / 24.0) * 2.0 * np.pi
+    )
+    vm2_theta = component_1_theta + component_2_theta
+
+    fig = plt.figure(figsize=(15.0, 5.8))
+
+    ax1 = fig.add_subplot(1, 2, 1)
+    ax1.hist(
+        hours,
+        bins=np.arange(0, 25, 1),
+        density=True,
+        color=COLORS["secondary"],
+        edgecolor="white",
+        alpha=0.46,
+        label="Per-player preferred hour",
+    )
+    ax1.plot(x_hours, vm1_theta * hour_scale, color=COLORS["ink"], linewidth=2.0, linestyle="--", label="1-component fit")
+    ax1.plot(x_hours, vm2_theta * hour_scale, color=COLORS["accent"], linewidth=2.5, label="2-component fit")
+    ax1.plot(x_hours, component_1_theta * hour_scale, color=COLORS["accent"], linewidth=1.3, linestyle=":", alpha=0.8)
+    ax1.plot(x_hours, component_2_theta * hour_scale, color=COLORS["accent"], linewidth=1.3, linestyle=":", alpha=0.8)
+    ax1.set_title("Preferred Play-Time Distribution")
+    ax1.set_xlabel("Circular mean play hour (local)")
+    ax1.set_ylabel("Density")
+    ax1.set_xlim(0, 24)
+    ax1.set_xticks(np.arange(0, 25, 2))
+    ax1.legend(frameon=False)
+    bootstrap_p = float(row["bootstrap_lrt_p_value"])
+    bootstrap_p_text = "< 0.001" if bootstrap_p < 0.001 else f"= {bootstrap_p:.3f}"
+    comparison_text = (
+        f"N players = {int(row['n_players']):,}\n"
+        f"Preferred: {row['preferred']}\n"
+        f"Delta BIC (1-2) = {float(row['delta_bic_1_minus_2']):.1f}\n"
+        f"Delta AIC (1-2) = {float(row['delta_aic_1_minus_2']):.1f}\n"
+        f"Bootstrap p {bootstrap_p_text}"
+    )
+    ax1.text(
+        0.02,
+        0.96,
+        comparison_text,
+        transform=ax1.transAxes,
+        va="top",
+        ha="left",
+        fontsize=10,
+        color=COLORS["ink"],
+        bbox={"facecolor": "white", "edgecolor": "#d9d1c8", "alpha": 0.9, "pad": 6},
+    )
+    style_axes(ax1, grid_axis="y")
+
+    ax2 = fig.add_subplot(1, 2, 2, projection="polar")
+    bins = np.linspace(0, 2.0 * np.pi, 25)
+    counts, edges = np.histogram(theta_data, bins=bins, density=True)
+    ax2.bar(
+        edges[:-1],
+        counts,
+        width=np.diff(edges),
+        align="edge",
+        color=COLORS["secondary"],
+        alpha=0.44,
+        edgecolor="white",
+        linewidth=0.8,
+    )
+    ax2.plot(x_theta, vm1_theta, color=COLORS["ink"], linewidth=1.9, linestyle="--")
+    ax2.plot(x_theta, vm2_theta, color=COLORS["accent"], linewidth=2.4)
+    ax2.plot(x_theta, component_1_theta, color=COLORS["accent"], linewidth=1.2, linestyle=":", alpha=0.8)
+    ax2.plot(x_theta, component_2_theta, color=COLORS["accent"], linewidth=1.2, linestyle=":", alpha=0.8)
+    ax2.set_theta_zero_location("N")
+    ax2.set_theta_direction(-1)
+    ax2.set_xticks(np.linspace(0, 2 * np.pi, 8, endpoint=False))
+    ax2.set_xticklabels(["00", "03", "06", "09", "12", "15", "18", "21"])
+    ax2.set_title(f"Single evening peak near {float(row['vm1_peak_h']):.1f} h", va="bottom")
+    ax2.grid(alpha=0.24)
+
+    fig.suptitle(
+        "Per-Player Preferred Play Time Across Servers",
+        fontsize=13.5,
+        fontweight="bold",
+        color=COLORS["ink"],
+    )
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=220, bbox_inches="tight")
+    plt.close(fig)
 
 
 def plot_grand_loadings(loadings_summary: pd.DataFrame, title: str, output_path: Path) -> None:
@@ -898,16 +1415,18 @@ def plot_pooled_circular_bimodality_fits(
         ax1.set_xlim(0, 24)
         ax1.set_xticks(np.arange(0, 25, 2))
         ax1.legend(frameon=False)
-        bic_text = (
+        bootstrap_p = float(row["bootstrap_lrt_p_value"])
+        bootstrap_p_text = "< 0.001" if bootstrap_p < 0.001 else f"= {bootstrap_p:.3f}"
+        comparison_text = (
             f"N phases = {int(row['n_phases']):,}\n"
-            f"BIC 1-comp = {float(row['vm1_bic']):.1f}\n"
-            f"BIC 2-comp = {float(row['vm2_bic']):.1f}\n"
-            f"Delta BIC = {float(row['delta_bic_1_minus_2']):.1f}"
+            f"Delta BIC (1-2) = {float(row['delta_bic_1_minus_2']):.1f}\n"
+            f"Delta AIC (1-2) = {float(row['delta_aic_1_minus_2']):.1f}\n"
+            f"Bootstrap p {bootstrap_p_text}"
         )
         ax1.text(
             0.02,
             0.96,
-            bic_text,
+            comparison_text,
             transform=ax1.transAxes,
             va="top",
             ha="left",
@@ -938,15 +1457,22 @@ def plot_pooled_circular_bimodality_fits(
         ax2.set_theta_direction(-1)
         ax2.set_xticks(np.linspace(0, 2 * np.pi, 8, endpoint=False))
         ax2.set_xticklabels(["00", "03", "06", "09", "12", "15", "18", "21"])
-        ax2.set_title(
-            f"{metric}: 2-component peaks "
-            f"{float(row['component_1_h']):.1f} h / {float(row['component_2_h']):.1f} h",
-            va="bottom",
-        )
+        preferred = str(row.get("preferred", ""))
+        if preferred == "2-component":
+            polar_title = (
+                f"{metric}: 2-component peaks "
+                f"{float(row['component_1_h']):.1f} h / {float(row['component_2_h']):.1f} h"
+            )
+        else:
+            polar_title = (
+                f"{metric}: single mode preferred "
+                f"(peak {float(row['vm1_peak_h']):.1f} h)"
+            )
+        ax2.set_title(polar_title, va="bottom")
         ax2.grid(alpha=0.24)
 
     fig.suptitle(
-        "Pooled Circular Bimodality Fits for Final FDR Phase Data",
+        "Pooled Circular Phase Fits: One- vs Two-Component von Mises",
         fontsize=13.5,
         fontweight="bold",
         color=COLORS["ink"],
@@ -1197,6 +1723,12 @@ def write_grand_markdown(
     )
     lines.extend(["", "## Pooled Circular Bimodality Test", ""])
     lines.extend(
+        [
+            "AIC and BIC compare penalized fit; the parametric-bootstrap likelihood-ratio p-value estimates how often an improvement this large occurs under the fitted one-component null.",
+            "",
+        ]
+    )
+    lines.extend(
         _markdown_table(
             pooled_bimodality,
             [
@@ -1204,7 +1736,18 @@ def write_grand_markdown(
                 "n_servers",
                 "n_phases",
                 "preferred",
+                "vm1_loglik",
+                "vm2_loglik",
+                "delta_loglik_2_minus_1",
+                "likelihood_ratio",
+                "vm1_aic",
+                "vm2_aic",
+                "delta_aic_1_minus_2",
+                "vm1_bic",
+                "vm2_bic",
                 "delta_bic_1_minus_2",
+                "bootstrap_lrt_p_value",
+                "bootstrap_exceedance_summary",
                 "component_1_h",
                 "component_2_h",
                 "component_1_weight",
@@ -1337,12 +1880,14 @@ def write_final_html_report(
   <p class="lead">Final across-server analysis using N-aware weighting. The headline circular test pools FDR-significant player peak phases from server-metric cells with at least {CIRCULAR_DENSITY_MIN_PHASES} significant phases.</p>
 
   <div class="callout">
-    <strong>Final bimodality result:</strong> PC1 and PC2 both prefer a two-component circular von Mises model by BIC in the pooled final data.
+    <strong>Final bimodality result:</strong> PC1 and PC2 both prefer a two-component circular von Mises model by BIC and AIC, with parametric-bootstrap likelihood-ratio p &lt; 0.001 for both pooled comparisons.
   </div>
 
   <h2>Pooled Circular Bimodality Fits</h2>
   <p>The histogram bars are the final pooled FDR-significant peak phases. The dashed curve is the one-component von Mises fit; the solid curve is the two-component mixture fit, with dotted component curves.</p>
+  <p>AIC and BIC compare penalized fit. The parametric bootstrap estimates how often a likelihood improvement this large occurs under the fitted one-component null, conditional on the retained pooled phases and von Mises model family.</p>
   <img src="grand_pooled_circular_bimodality_fits.png" alt="Pooled circular bimodality fits with one- and two-component von Mises curves">
+  <h3>Model-comparison diagnostics</h3>
   {_html_table(
       bic_rows,
       [
@@ -1350,9 +1895,25 @@ def write_final_html_report(
           "n_servers",
           "n_phases",
           "preferred",
+          "vm1_loglik",
+          "vm2_loglik",
+          "delta_loglik_2_minus_1",
+          "likelihood_ratio",
+          "vm1_aic",
+          "vm2_aic",
+          "delta_aic_1_minus_2",
           "vm1_bic",
           "vm2_bic",
           "delta_bic_1_minus_2",
+          "bootstrap_lrt_p_value",
+          "bootstrap_exceedance_summary",
+      ],
+  )}
+  <h3>Two-component fit parameters</h3>
+  {_html_table(
+      bic_rows,
+      [
+          "metric",
           "component_1_h",
           "component_2_h",
           "component_1_weight",
@@ -1405,6 +1966,7 @@ def run_grand_analysis(
     output_root: str | Path = "results",
     platforms: list[str] | None = ANALYSIS_PLATFORMS,
     clean: bool = True,
+    phase_exclude: list[str] | None = PHASE_ANALYSIS_EXCLUDE,
 ) -> dict[str, Any]:
     """Run the across-server grand analysis and write `results/GRAND/` outputs."""
 
@@ -1418,6 +1980,13 @@ def run_grand_analysis(
     server_dirs = discover_server_dirs(output_root, platforms=platforms)
     if not server_dirs:
         raise RuntimeError("No per-server analysis_summary.csv files found for grand analysis.")
+
+    # Servers whose per-player peak phase is unreliable (see PHASE_ANALYSIS_EXCLUDE)
+    # are dropped from every phase-based analysis but kept everywhere else.
+    exclude = set(phase_exclude or [])
+    phase_dirs = [d for d in server_dirs if d.name not in exclude]
+    if exclude:
+        print(f"  excluding from phase analyses: {', '.join(sorted(exclude))}", flush=True)
 
     server_summary = load_server_summaries(server_dirs)
     server_summary = add_server_weights(server_summary, server_dirs)
@@ -1453,7 +2022,7 @@ def run_grand_analysis(
     period_summary = summarize_periodograms(periodograms)
     save_table(period_summary, grand_dir / "grand_within_subject_periodograms.csv")
 
-    phases = load_metric_table(server_dirs, "phase_summary.csv")
+    phases = load_metric_table(phase_dirs, "phase_summary.csv")
     phase_summary = summarize_phase_counts(phases)
     save_table(phase_summary, grand_dir / "grand_phase_summary.csv")
     plot_periods_and_phases(
@@ -1463,27 +2032,47 @@ def run_grand_analysis(
         grand_dir / "grand_within_subject_summary.png",
     )
 
-    circular = load_metric_table(server_dirs, "circular_modality_summary.csv")
+    circular = load_metric_table(phase_dirs, "circular_modality_summary.csv")
     circular_summary = summarize_circular_models(circular)
     save_table(circular_summary, grand_dir / "grand_circular_modality_summary.csv")
 
-    density_summary, density_server_curves = load_pc_peak_densities(server_dirs)
+    density_summary, density_server_curves = load_pc_peak_densities(phase_dirs)
     density_modes = summarize_peak_density_modes(density_summary)
     save_table(density_summary, grand_dir / "grand_pc_peak_density.csv")
     save_table(density_server_curves, grand_dir / "grand_pc_peak_density_server_curves.csv")
     save_table(density_modes, grand_dir / "grand_pc_peak_density_modes.csv")
     plot_pc_peak_densities(density_summary, grand_dir / "grand_pc_peak_density.png")
 
-    pooled_phases, pooled_phase_inclusion = load_pooled_significant_phases(server_dirs)
+    pooled_phases, pooled_phase_inclusion = load_pooled_significant_phases(phase_dirs)
     save_table(pooled_phases, grand_dir / "grand_pooled_phase_values.csv")
     save_table(pooled_phase_inclusion, grand_dir / "grand_pooled_phase_inclusion.csv")
 
-    pooled_bimodality = pooled_circular_bimodality_tests(server_dirs)
+    pooled_bimodality = pooled_circular_bimodality_tests(phase_dirs)
     save_table(pooled_bimodality, grand_dir / "grand_pooled_circular_bimodality.csv")
     plot_pooled_circular_bimodality_fits(
         pooled_phases,
         pooled_bimodality,
         grand_dir / "grand_pooled_circular_bimodality_fits.png",
+    )
+
+    play_volume = load_play_volume_by_hour(server_dirs)
+    play_volume_summary = play_volume_timezone_summary(play_volume)
+    save_table(play_volume, grand_dir / "grand_play_volume_by_hour.csv")
+    save_table(play_volume_summary, grand_dir / "grand_play_volume_timezone_summary.csv")
+    plot_play_volume_timezone(
+        play_volume,
+        play_volume_summary,
+        grand_dir / "grand_play_volume_timezone.png",
+    )
+
+    pooled_chronotypes = load_pooled_play_time_chronotypes(server_dirs)
+    play_time_bimodality = play_time_chronotype_bimodality_test(pooled_chronotypes)
+    save_table(pooled_chronotypes, grand_dir / "grand_play_time_chronotype_values.csv")
+    save_table(play_time_bimodality, grand_dir / "grand_play_time_chronotype_bimodality.csv")
+    plot_play_time_chronotype(
+        pooled_chronotypes,
+        play_time_bimodality,
+        grand_dir / "grand_play_time_chronotype.png",
     )
 
     write_grand_markdown(

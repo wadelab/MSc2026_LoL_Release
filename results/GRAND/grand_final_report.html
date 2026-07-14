@@ -89,12 +89,14 @@
   <p class="lead">Final across-server analysis using N-aware weighting. The headline circular test pools FDR-significant player peak phases from server-metric cells with at least 20 significant phases.</p>
 
   <div class="callout">
-    <strong>Final bimodality result:</strong> PC1 and PC2 both prefer a two-component circular von Mises model by BIC in the pooled final data.
+    <strong>Final bimodality result:</strong> PC1 and PC2 both prefer a two-component circular von Mises model by BIC and AIC, with parametric-bootstrap likelihood-ratio p &lt; 0.001 for both pooled comparisons.
   </div>
 
   <h2>Pooled Circular Bimodality Fits</h2>
   <p>The histogram bars are the final pooled FDR-significant peak phases. The dashed curve is the one-component von Mises fit; the solid curve is the two-component mixture fit, with dotted component curves.</p>
+  <p>AIC and BIC compare penalized fit. The parametric bootstrap estimates how often a likelihood improvement this large occurs under the fitted one-component null, conditional on the retained pooled phases and von Mises model family.</p>
   <img src="grand_pooled_circular_bimodality_fits.png" alt="Pooled circular bimodality fits with one- and two-component von Mises curves">
+  <h3>Model-comparison diagnostics</h3>
   <table class="dataframe data-table">
   <thead>
     <tr style="text-align: left;">
@@ -102,9 +104,64 @@
       <th>n_servers</th>
       <th>n_phases</th>
       <th>preferred</th>
+      <th>vm1_loglik</th>
+      <th>vm2_loglik</th>
+      <th>delta_loglik_2_minus_1</th>
+      <th>likelihood_ratio</th>
+      <th>vm1_aic</th>
+      <th>vm2_aic</th>
+      <th>delta_aic_1_minus_2</th>
       <th>vm1_bic</th>
       <th>vm2_bic</th>
       <th>delta_bic_1_minus_2</th>
+      <th>bootstrap_lrt_p_value</th>
+      <th>bootstrap_exceedance_summary</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>PC1</td>
+      <td>7</td>
+      <td>992</td>
+      <td>1-component</td>
+      <td>-1784.891</td>
+      <td>-1782.370</td>
+      <td>2.521</td>
+      <td>5.042</td>
+      <td>3573.782</td>
+      <td>3574.740</td>
+      <td>-0.958</td>
+      <td>3583.582</td>
+      <td>3599.239</td>
+      <td>-15.657</td>
+      <td>0.063</td>
+      <td>62 / 1000</td>
+    </tr>
+    <tr>
+      <td>PC2</td>
+      <td>6</td>
+      <td>704</td>
+      <td>1-component</td>
+      <td>-1263.204</td>
+      <td>-1261.074</td>
+      <td>2.130</td>
+      <td>4.259</td>
+      <td>2530.408</td>
+      <td>2532.149</td>
+      <td>-1.741</td>
+      <td>2539.522</td>
+      <td>2554.933</td>
+      <td>-15.411</td>
+      <td>0.128</td>
+      <td>127 / 1000</td>
+    </tr>
+  </tbody>
+</table>
+  <h3>Two-component fit parameters</h3>
+  <table class="dataframe data-table">
+  <thead>
+    <tr style="text-align: left;">
+      <th>metric</th>
       <th>component_1_h</th>
       <th>component_2_h</th>
       <th>component_1_weight</th>
@@ -114,29 +171,17 @@
   <tbody>
     <tr>
       <td>PC1</td>
-      <td>8</td>
-      <td>1713</td>
-      <td>2-component</td>
-      <td>6238.794</td>
-      <td>6221.559</td>
-      <td>17.235</td>
-      <td>21.497</td>
-      <td>7.145</td>
-      <td>0.573</td>
-      <td>0.427</td>
+      <td>2.465</td>
+      <td>18.607</td>
+      <td>0.563</td>
+      <td>0.437</td>
     </tr>
     <tr>
       <td>PC2</td>
-      <td>7</td>
-      <td>1465</td>
-      <td>2-component</td>
-      <td>5366.235</td>
-      <td>5337.857</td>
-      <td>28.378</td>
-      <td>9.365</td>
-      <td>19.934</td>
-      <td>0.647</td>
-      <td>0.353</td>
+      <td>15.013</td>
+      <td>7.203</td>
+      <td>0.568</td>
+      <td>0.432</td>
     </tr>
   </tbody>
 </table>
@@ -159,19 +204,19 @@
   <tbody>
     <tr>
       <td>PC1</td>
-      <td>8</td>
-      <td>1713</td>
-      <td>22.400</td>
-      <td>0.053</td>
+      <td>7</td>
+      <td>992</td>
+      <td>23.700</td>
+      <td>0.056</td>
       <td>4.000</td>
       <td>20</td>
     </tr>
     <tr>
       <td>PC2</td>
-      <td>7</td>
-      <td>1465</td>
-      <td>9.800</td>
-      <td>0.052</td>
+      <td>6</td>
+      <td>704</td>
+      <td>12.500</td>
+      <td>0.056</td>
       <td>4.000</td>
       <td>20</td>
     </tr>
@@ -198,18 +243,18 @@
       <td>7</td>
       <td>valid_players</td>
       <td>7000</td>
-      <td>24.000</td>
-      <td>0.000</td>
-      <td>0.000</td>
+      <td>23.964</td>
+      <td>0.076</td>
+      <td>0.029</td>
     </tr>
     <tr>
       <td>PC2</td>
-      <td>7</td>
+      <td>8</td>
       <td>valid_players</td>
-      <td>7000</td>
-      <td>24.000</td>
-      <td>0.000</td>
-      <td>0.000</td>
+      <td>8000</td>
+      <td>23.937</td>
+      <td>0.056</td>
+      <td>0.020</td>
     </tr>
     <tr>
       <td>DeltaMMR</td>
@@ -217,8 +262,8 @@
       <td>valid_players</td>
       <td>7000</td>
       <td>24.000</td>
-      <td>0.000</td>
-      <td>0.000</td>
+      <td>0.039</td>
+      <td>0.015</td>
     </tr>
   </tbody>
 </table>
@@ -236,26 +281,26 @@
   <tbody>
     <tr>
       <td>PC1</td>
-      <td>8</td>
+      <td>7</td>
       <td>players_analyzed</td>
-      <td>8000</td>
-      <td>1713</td>
-      <td>0.214</td>
+      <td>7000</td>
+      <td>992</td>
+      <td>0.142</td>
     </tr>
     <tr>
       <td>PC2</td>
-      <td>8</td>
+      <td>7</td>
       <td>players_analyzed</td>
-      <td>8000</td>
-      <td>1480</td>
-      <td>0.185</td>
+      <td>7000</td>
+      <td>719</td>
+      <td>0.103</td>
     </tr>
     <tr>
       <td>DeltaMMR</td>
-      <td>8</td>
+      <td>7</td>
       <td>players_analyzed</td>
-      <td>8000</td>
-      <td>26</td>
+      <td>7000</td>
+      <td>24</td>
       <td>0.003</td>
     </tr>
   </tbody>
@@ -278,31 +323,31 @@
   <tbody>
     <tr>
       <td>PC1</td>
-      <td>8</td>
+      <td>7</td>
       <td>n_fdr_significant</td>
-      <td>1713</td>
-      <td>8</td>
+      <td>992</td>
+      <td>7</td>
       <td>0</td>
       <td>816</td>
-      <td>897</td>
+      <td>176</td>
     </tr>
     <tr>
       <td>PC2</td>
-      <td>8</td>
-      <td>n_fdr_significant</td>
-      <td>1480</td>
       <td>7</td>
+      <td>n_fdr_significant</td>
+      <td>719</td>
+      <td>6</td>
       <td>1</td>
       <td>704</td>
-      <td>761</td>
+      <td>0</td>
     </tr>
     <tr>
       <td>DeltaMMR</td>
-      <td>8</td>
+      <td>7</td>
       <td>n_fdr_significant</td>
-      <td>26</td>
+      <td>24</td>
       <td>0</td>
-      <td>8</td>
+      <td>7</td>
       <td>0</td>
       <td>0</td>
     </tr>
@@ -329,9 +374,9 @@
       <td>8</td>
       <td>server_n_win_games</td>
       <td>92720617.000</td>
-      <td>23.698</td>
-      <td>1.878</td>
-      <td>12.000</td>
+      <td>24.000</td>
+      <td>0.000</td>
+      <td>24.000</td>
       <td>24.000</td>
     </tr>
     <tr>
@@ -339,10 +384,10 @@
       <td>8</td>
       <td>server_n_win_games</td>
       <td>92720617.000</td>
-      <td>20.876</td>
-      <td>6.192</td>
-      <td>8.000</td>
-      <td>24.000</td>
+      <td>23.570</td>
+      <td>3.987</td>
+      <td>6.126</td>
+      <td>33.688</td>
     </tr>
     <tr>
       <td>performance_pc1_explained</td>

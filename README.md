@@ -114,7 +114,9 @@ Open:
 results/GRAND/grand_final_report.html
 ```
 
-The report includes the final N-weighted summaries, pooled circular bimodality BICs, and the fitted one- vs two-component von Mises curves.
+The report includes the final N-weighted summaries, pooled circular bimodality
+log likelihoods, AICs, BICs, parametric-bootstrap likelihood-ratio checks, and
+the fitted one- vs two-component von Mises curves.
 
 ## Notes
 

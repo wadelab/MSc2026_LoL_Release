@@ -1,0 +1,126 @@
+---
+title: "Supplementary Material — Individual differences in circadian rhythms measured at a global scale"
+author:
+  - name: Alex R Wade
+    affiliation: University of York
+    orcid: 0000-0003-4871-2747
+    corresponding: true
+date: 2026-06-05
+bibliography: references.bib
+csl: springer-basic-brackets.csl
+number-sections: true
+toc: false
+crossref:
+  fig-title: "Figure S"
+  tbl-title: "Table S"
+  fig-prefix: "Figure S"
+  tbl-prefix: "Table S"
+format:
+  html:
+    theme: default
+    fig-cap-location: bottom
+    embed-resources: true
+  pdf:
+    documentclass: article
+    papersize: a4
+    geometry: margin=1in
+    fig-pos: "H"
+    pdf-engine: pdflatex
+    include-in-header:
+      text: |
+        \DeclareUnicodeCharacter{0394}{$\Delta$}
+        \DeclareUnicodeCharacter{03BA}{$\kappa$}
+        \DeclareUnicodeCharacter{2248}{$\approx$}
+        \DeclareUnicodeCharacter{2264}{$\le$}
+        \DeclareUnicodeCharacter{2265}{$\ge$}
+        \DeclareUnicodeCharacter{221D}{$\propto$}
+        \DeclareUnicodeCharacter{2212}{$-$}
+        \DeclareUnicodeCharacter{00B1}{$\pm$}
+---
+
+This document collects supporting analyses for the main text. Section references,
+metric names (PC1, PC2, ΔMMR) and methods follow the main paper.
+
+# Per-server data summary {#sec-data}
+
+The corpus is 92.7 million ranked games from the top ~1,000 players on each of
+eight regional servers. Servers differ by an order of magnitude in game volume,
+from 2.3 million games on OC1 to 30.1 million on EUW1 (@tbl-servers). They also
+differ sharply in how many players carry an individually significant circadian
+phase: **JP1 is an extreme outlier**, with roughly three quarters of its players
+reaching the Benjamini–Hochberg threshold on both behavioural components, against
+10–28% everywhere else. This is a symptom of JP1's daily maintenance shutdown
+(~05:00–11:00 local; main-text Figure 1): the truncated sampling window makes the
+fitted 24 h sinusoid look artificially strong and places its peak in unsampled
+hours. We therefore **exclude JP1 from all phase-based analyses** (the FDR
+fractions, the modality fits and the kernel density); it is retained only in the
+period analysis and the play-volume figure. The per-server row for JP1 below is
+shown for completeness and is flagged accordingly.
+
+| Server | Ranked games | PC1 significant | PC2 significant |
+|:--|--:|--:|--:|
+| BR1  | 10.35 M | 9.6% | 5.9% |
+| EUN1 | 13.55 M | 11.0% | 6.8% |
+| EUW1 | 30.15 M | 17.6% | 20.5% |
+| LA1  | 3.81 M | 9.1% | 3.1% |
+| LA2  | 2.91 M | 9.6% | 1.5% |
+| NA1  | 17.15 M | 25.4% | 28.4% |
+| OC1  | 2.33 M | 16.9% | 5.7% |
+| JP1 (excluded) | 12.47 M | 72.1% | 76.1% |
+| **Total** | **92.72 M** | — | — |
+
+: Games analysed and the percentage of each server's ~1,000 players whose
+  PC1 and PC2 peak phase was individually significant (Benjamini–Hochberg
+  FDR < 0.05). JP1 (moved to the foot of the table) is excluded from the pooled
+  phase analyses; its inflated fractions reflect the maintenance-window artifact
+  described above. {#tbl-servers}
+
+# Within-subject rhythm summary {#sec-within}
+
+Each server's within-subject periodogram peaks within a few minutes of 24.0 h for
+both behavioural components and for ΔMMR (@fig-within, left; JP1's two flagged
+harmonic peaks are the outliers screened from the period meta-analysis): the
+circadian period is not a pooled artefact but recurs server by server, with the
+N-weighted mean sitting on 24 h. The fraction of players carrying an individually
+significant phase separates behaviour from success (@fig-within, right; JP1
+excluded): 14.2% of players for PC1 and 10.3% for PC2, against 0.3% for ΔMMR.
+Skill *change* has almost no per-player circadian signal, which is why it cannot
+be tested for modality.
+
+![Within-subject rhythm summary. **Left:** best period from each server's player-level periodogram for PC1, PC2 and ΔMMR; all sit on 24 h (dashed), with the N-weighted mean ± SEM overlaid. **Right:** weighted fraction of analysed players whose peak phase was FDR-significant, by metric.](../results/GRAND/grand_within_subject_summary.png){#fig-within width=100%}
+
+# Phase variation is not inherited from the play-time schedule {#sec-playtime}
+
+The wide individual spread of behavioural peak phases (main text) is not an echo
+of *when* people play. A natural worry is that the behavioural phases only
+reproduce the shape of the play-time schedule. We tested this directly. For each
+analysed player we took the circular-mean hour of their games in local time —
+their preferred play time — and pooled these across servers (7,966 players), then
+described the distribution with the same circular fits used for the behavioural
+phases. This complements Figure 1 of the main text, which makes the point at the
+level of the *server*: aggregate play volume follows a single evening-peaked
+curve on every server once local time is used. Here we ask about individual
+*players*.
+
+The preferred-play-time distribution is single-peaked and comparatively *tight*
+(@fig-playtime, @tbl-playtime): it concentrates in the evening around 19.6 h with
+a concentration of $\kappa \approx 2.6$ (circular standard deviation ≈ 3 h), and
+BIC prefers one component over two (ΔBIC = 1.8 in favour of the single component).
+The behavioural peak phases, by contrast, are single-moded but spread more than
+twice as widely (circular standard deviation ≈ 7 h; main text @sec-bimodality).
+Players cluster their log-on times into the evening far more tightly than their
+behaviour peaks, so the broad individual variation in behavioural phase is a
+property of how players behave at a given hour, not of the hours they choose to
+play.
+
+![Per-player preferred play time, pooled across servers (N = 7,966). **Left:** distribution of each player's circular-mean play hour (local), with one-component (dashed) and two-component (solid, dotted components) von Mises fits. **Right:** the same fits in polar view. The distribution has a single evening peak near 19.6 h; BIC prefers one component.](../results/GRAND/grand_play_time_chronotype.png){#fig-playtime width=100%}
+
+| Metric | N players | log L (1) | log L (2) | ΔAIC (1−2) | ΔBIC (1−2) | Preferred | Bootstrap $p$ |
+|:--|--:|--:|--:|--:|--:|:--|:--|
+| Play time | 7,966 | −8,736.8 | −8,724.2 | 19.2 | −1.8 | 1-component | <.001 |
+
+: One- versus two-component circular fit to pooled preferred play times.
+  A negative ΔBIC favours the single component: play time is single-peaked, as
+  are the behavioural peak phases in the main text (@sec-bimodality), but the
+  play-time distribution is far more concentrated (κ ≈ 2.6 vs ≈ 0.4).
+  {#tbl-playtime}

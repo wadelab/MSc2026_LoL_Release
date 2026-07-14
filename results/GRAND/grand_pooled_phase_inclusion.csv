@@ -2,7 +2,6 @@ metric,platform,n_phases,included,min_phases
 PC1,BR1,96,True,20
 PC1,EUN1,110,True,20
 PC1,EUW1,176,True,20
-PC1,JP1,721,True,20
 PC1,LA1,91,True,20
 PC1,LA2,96,True,20
 PC1,NA1,254,True,20
@@ -10,7 +9,6 @@ PC1,OC1,169,True,20
 PC2,BR1,59,True,20
 PC2,EUN1,68,True,20
 PC2,EUW1,205,True,20
-PC2,JP1,761,True,20
 PC2,LA1,31,True,20
 PC2,LA2,15,False,20
 PC2,NA1,284,True,20
@@ -18,7 +16,6 @@ PC2,OC1,57,True,20
 DeltaMMR,BR1,1,False,20
 DeltaMMR,EUN1,5,False,20
 DeltaMMR,EUW1,2,False,20
-DeltaMMR,JP1,2,False,20
 DeltaMMR,LA1,4,False,20
 DeltaMMR,LA2,1,False,20
 DeltaMMR,NA1,6,False,20

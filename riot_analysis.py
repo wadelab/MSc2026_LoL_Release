@@ -88,8 +88,8 @@ class AnalysisConfig:
     max_hour_limit: int = 5000
     min_period_h: float = 6.0
     max_period_h: float = 48.0
-    period_step_h: float = 1.0
-    player_period_step_h: float = 1.0
+    period_step_h: float = 0.0
+    player_period_step_h: float = 0.0
     n_freq: int = 500
     player_n_freq: int = 2000
     phase_alpha: float = 0.05
@@ -450,25 +450,39 @@ def filter_hourly_window(hourly: pd.DataFrame, max_hour_limit: int) -> pd.DataFr
 def period_grid(config: AnalysisConfig, *, player: bool = False) -> tuple[np.ndarray, np.ndarray]:
     """Return frequency and period arrays.
 
-    The grid is evenly spaced in period hours (default 1 h bins over ~6-48 h).
-    This keeps reporting interpretable and avoids overly fine period bins.
+    By default the grid is evenly spaced in frequency (as required for
+    Lomb-Scargle) but is anchored so that exactly 24 h (f = 1/24) is a grid node.
+    This lets a true circadian peak be reported at 24.00 h instead of snapping to
+    a neighbouring bin, matching the paper's Methods (`n_freq`/`player_n_freq`
+    frequencies over ~6-48 h).
+
+    Setting ``period_step_h`` (or ``player_period_step_h``) above zero instead
+    builds an even-period-hour grid at that step; the teaching notebooks use this
+    to get interpretable whole-hour period bins.
     """
 
     period_step_h = config.player_period_step_h if player else config.period_step_h
-    if period_step_h <= 0:
-        raise ValueError("period_step_h must be > 0")
+    if period_step_h and period_step_h > 0:
+        period = np.arange(
+            config.min_period_h,
+            config.max_period_h + (0.5 * period_step_h),
+            period_step_h,
+            dtype=float,
+        )
+        period = period[period > 0]
+        if len(period) == 0:
+            raise ValueError("Period grid is empty; check min/max period bounds.")
+        frequency = 1.0 / period
+        return frequency, 1.0 / frequency
 
-    period = np.arange(
-        config.min_period_h,
-        config.max_period_h + (0.5 * period_step_h),
-        period_step_h,
-        dtype=float,
-    )
-    period = period[period > 0]
-    if len(period) == 0:
-        raise ValueError("Period grid is empty; check min/max period bounds.")
-
-    frequency = 1.0 / period
+    n_freq = config.player_n_freq if player else config.n_freq
+    f_min = 1.0 / config.max_period_h
+    f_max = 1.0 / config.min_period_h
+    f_anchor = 1.0 / 24.0
+    df = (f_max - f_min) / (n_freq - 1)
+    k_low = int(np.floor((f_anchor - f_min) / df))
+    k_high = int(np.floor((f_max - f_anchor) / df))
+    frequency = f_anchor + np.arange(-k_low, k_high + 1) * df
     return frequency, 1.0 / frequency
 
 
@@ -741,7 +755,12 @@ def load_top_players(
     platform: str,
     top_n_players: int,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Load top players by game count and all their game rows."""
+    """Load top players by game count and all their game rows.
+
+    Accounts tied on game count at the cutoff are broken by ACCOUNTID, so the
+    cohort is the same on every run. Without the tie-break the LIMIT takes an
+    arbitrary subset of the tied accounts and the whole analysis shifts.
+    """
 
     top_players = conn.execute(
         """
@@ -749,7 +768,7 @@ def load_top_players(
         FROM riotData
         WHERE PLATFORMID = ? AND ACCOUNTID IS NOT NULL
         GROUP BY ACCOUNTID
-        ORDER BY game_count DESC
+        ORDER BY game_count DESC, ACCOUNTID ASC
         LIMIT ?;
         """,
         [platform, int(top_n_players)],
@@ -971,6 +990,111 @@ def extract_player_phases(
     return phase_results
 
 
+def rayleigh_test(n: Any, rbar: Any) -> np.ndarray:
+    """Rayleigh test p-values for departure from a uniform circular distribution.
+
+    Uses the standard Zar large-sample approximation with the first correction
+    term. `n` is games per player and `rbar` the mean resultant length.
+    """
+
+    n = np.asarray(n, dtype=float)
+    rbar = np.asarray(rbar, dtype=float)
+    z = n * rbar**2
+    p = np.exp(-z) * (1.0 + (2.0 * z - z**2) / (4.0 * n))
+    return np.clip(p, 0.0, 1.0)
+
+
+def extract_player_play_time_chronotypes(
+    player_data: pd.DataFrame,
+    config: AnalysisConfig,
+    min_games: int = 10,
+) -> pd.DataFrame:
+    """Per-player preferred play time from local game-start hours.
+
+    A behaviour-only chronotype that mirrors the per-player PC phase analysis but
+    uses *when* each player plays rather than *how* they perform: for each player
+    it returns the circular mean of their local game-start hour, the mean
+    resultant length, a Rayleigh non-uniformity p-value and an FDR-significance
+    flag. One row per player with at least `min_games` games.
+    """
+
+    offset = float(utc_offset_hours(config.platform))
+    work = player_data[["ACCOUNTID", "TIMESTAMP"]].copy()
+    work["TIMESTAMP"] = pd.to_numeric(work["TIMESTAMP"], errors="coerce")
+    work = work.dropna(subset=["ACCOUNTID", "TIMESTAMP"])
+
+    local_hour = np.mod(work["TIMESTAMP"].to_numpy(dtype=float) / 3600000.0 + offset, 24.0)
+    theta = local_hour * (2.0 * np.pi / 24.0)
+    work["_cos"] = np.cos(theta)
+    work["_sin"] = np.sin(theta)
+
+    grouped = work.groupby("ACCOUNTID", sort=False).agg(
+        n_games=("TIMESTAMP", "size"),
+        cos_sum=("_cos", "sum"),
+        sin_sum=("_sin", "sum"),
+    )
+    grouped = grouped[grouped["n_games"] >= min_games]
+
+    columns = ["ACCOUNTID", "n_games", "mean_hour_local", "rbar", "rayleigh_p", "fdr_significant"]
+    if grouped.empty:
+        return pd.DataFrame(columns=columns)
+
+    n = grouped["n_games"].to_numpy(dtype=float)
+    cos_sum = grouped["cos_sum"].to_numpy(dtype=float)
+    sin_sum = grouped["sin_sum"].to_numpy(dtype=float)
+    mean_theta = np.mod(np.arctan2(sin_sum, cos_sum), 2.0 * np.pi)
+    rbar = np.sqrt(cos_sum**2 + sin_sum**2) / n
+
+    result = pd.DataFrame(
+        {
+            "ACCOUNTID": grouped.index.to_numpy(),
+            "n_games": n.astype(int),
+            "mean_hour_local": mean_theta * (24.0 / (2.0 * np.pi)),
+            "rbar": rbar,
+            "rayleigh_p": rayleigh_test(n, rbar),
+        }
+    )
+    result["fdr_significant"] = benjamini_hochberg_mask(
+        result["rayleigh_p"].to_numpy(), alpha=config.phase_alpha
+    )
+    return result[columns]
+
+
+def extract_play_volume_by_hour(
+    player_data: pd.DataFrame,
+    config: AnalysisConfig,
+) -> pd.DataFrame:
+    """Count the cohort's games in each hour of the day, in UTC and in local time.
+
+    The exposure schedule underlying every downstream rhythm result: one row per
+    hour of day, with the raw game count and that server's share of games.
+    """
+
+    offset = int(utc_offset_hours(config.platform))
+    timestamps = pd.to_numeric(player_data["TIMESTAMP"], errors="coerce").dropna()
+    utc_hour = np.floor(timestamps.to_numpy(dtype=float) / 3600000.0) % 24.0
+
+    counts = (
+        pd.Series(utc_hour.astype(int))
+        .value_counts()
+        .reindex(range(24), fill_value=0)
+        .sort_index()
+    )
+
+    result = pd.DataFrame(
+        {
+            "platform": config.platform,
+            "utc_offset_hours": offset,
+            "utc_hour": counts.index.to_numpy(dtype=int),
+            "local_hour": (counts.index.to_numpy(dtype=int) + offset) % 24,
+            "n_games": counts.to_numpy(dtype=int),
+        }
+    )
+    total = result["n_games"].sum()
+    result["fraction"] = result["n_games"] / total if total else np.nan
+    return result
+
+
 def _wrap_mu(mu: float) -> float:
     return float(np.mod(mu, 2.0 * np.pi))
 
@@ -984,6 +1108,15 @@ def _kappa_from_rbar(rbar: float) -> float:
     return 1 / (rbar**3 - 4 * rbar**2 + 3 * rbar)
 
 
+def _information_criteria(loglik: float, n: int, n_params: int) -> dict[str, float]:
+    """Return AIC and BIC for a fitted model."""
+
+    return {
+        "aic": float(2 * n_params - 2 * loglik),
+        "bic": float(n_params * np.log(n) - 2 * loglik),
+    }
+
+
 def fit_vonmises_1comp(theta_vals: np.ndarray) -> dict[str, float]:
     """Fit a one-component circular von Mises model."""
 
@@ -993,8 +1126,8 @@ def fit_vonmises_1comp(theta_vals: np.ndarray) -> dict[str, float]:
     rbar = np.abs(z_mean)
     kappa = max(1e-4, _kappa_from_rbar(rbar))
     loglik = float(np.sum(vonmises.logpdf(theta_vals, kappa, loc=mu)))
-    bic = float(2 * np.log(len(theta_vals)) - 2 * loglik)
-    return {"mu": mu, "kappa": kappa, "loglik": loglik, "bic": bic}
+    scores = _information_criteria(loglik, len(theta_vals), n_params=2)
+    return {"mu": mu, "kappa": kappa, "loglik": loglik, **scores}
 
 
 def fit_vonmises_2comp(theta_vals: np.ndarray, max_iter: int = 200, tol: float = 1e-6) -> dict[str, float]:
@@ -1038,7 +1171,11 @@ def fit_vonmises_2comp(theta_vals: np.ndarray, max_iter: int = 200, tol: float =
             break
         loglik = next_loglik
 
-    bic = float(5 * np.log(n) - 2 * loglik)
+    f1 = vonmises.pdf(theta_vals, kappa1, loc=mu1)
+    f2 = vonmises.pdf(theta_vals, kappa2, loc=mu2)
+    mix = np.clip(pi1 * f1 + (1 - pi1) * f2, 1e-300, None)
+    loglik = float(np.sum(np.log(mix)))
+    scores = _information_criteria(loglik, n, n_params=5)
     return {
         "pi1": pi1,
         "pi2": 1 - pi1,
@@ -1047,7 +1184,7 @@ def fit_vonmises_2comp(theta_vals: np.ndarray, max_iter: int = 200, tol: float =
         "kappa1": kappa1,
         "kappa2": kappa2,
         "loglik": loglik,
-        "bic": bic,
+        **scores,
     }
 
 
@@ -1068,6 +1205,7 @@ def circular_modality_tests(phase_results: dict[str, dict[str, Any]]) -> dict[st
         theta = (data_hours / 24.0) * 2.0 * np.pi
         vm1 = fit_vonmises_1comp(theta)
         vm2 = fit_vonmises_2comp(theta)
+        delta_bic = vm1["bic"] - vm2["bic"]
         circular[label] = {
             "data_hours": data_hours,
             "theta": theta,
@@ -1075,7 +1213,11 @@ def circular_modality_tests(phase_results: dict[str, dict[str, Any]]) -> dict[st
             "status": "fit",
             "vm1": vm1,
             "vm2": vm2,
-            "preferred": "2-component" if vm2["bic"] < vm1["bic"] else "1-component",
+            "preferred": "2-component" if delta_bic > 0 else "1-component",
+            "delta_loglik_2_minus_1": vm2["loglik"] - vm1["loglik"],
+            "likelihood_ratio": 2.0 * (vm2["loglik"] - vm1["loglik"]),
+            "delta_aic_1_minus_2": vm1["aic"] - vm2["aic"],
+            "delta_bic_1_minus_2": delta_bic,
             "mu1_h": float((vm2["mu1"] / (2 * np.pi)) * 24.0),
             "mu2_h": float((vm2["mu2"] / (2 * np.pi)) * 24.0),
         }
@@ -1304,8 +1446,16 @@ def plot_circular_results(
             "n_fdr_significant": result["n"],
             "status": result["status"],
             "preferred": result.get("preferred"),
+            "vm1_loglik": result.get("vm1", {}).get("loglik"),
+            "vm2_loglik": result.get("vm2", {}).get("loglik"),
+            "delta_loglik_2_minus_1": result.get("delta_loglik_2_minus_1"),
+            "likelihood_ratio": result.get("likelihood_ratio"),
+            "vm1_aic": result.get("vm1", {}).get("aic"),
+            "vm2_aic": result.get("vm2", {}).get("aic"),
+            "delta_aic_1_minus_2": result.get("delta_aic_1_minus_2"),
             "vm1_bic": result.get("vm1", {}).get("bic"),
             "vm2_bic": result.get("vm2", {}).get("bic"),
+            "delta_bic_1_minus_2": result.get("delta_bic_1_minus_2"),
             "component_peak_1_h": result.get("mu1_h"),
             "component_peak_2_h": result.get("mu2_h"),
         }
@@ -1464,6 +1614,14 @@ def run_platform_analysis(conn: duckdb.DuckDBPyConnection, config: AnalysisConfi
         summary[f"{label.lower()}_circular_status"] = result["status"]
         summary[f"{label.lower()}_circular_preferred"] = result.get("preferred")
         summary[f"{label.lower()}_circular_n"] = result["n"]
+
+    play_volume = extract_play_volume_by_hour(player_data, config)
+    save_table(play_volume, output_dir / f"play_volume_by_hour_{config.platform}.csv")
+
+    play_time_chrono = extract_player_play_time_chronotypes(player_data, config)
+    save_table(play_time_chrono, output_dir / f"play_time_chronotypes_{config.platform}.csv")
+    summary["play_time_chronotype_players"] = int(len(play_time_chrono))
+    summary["play_time_chronotype_fdr_significant"] = int(play_time_chrono["fdr_significant"].sum())
 
     save_table(pd.DataFrame([summary]), output_dir / "analysis_summary.csv")
     return summary

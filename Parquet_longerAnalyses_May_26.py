@@ -205,7 +205,7 @@ def main() -> int:
         print("Running grand analysis from existing per-server outputs", flush=True)
         result = run_grand_analysis(
             output_root=output_root,
-            platforms=args.platform,
+            platforms=args.platform or ANALYSIS_PLATFORMS,
             clean=not args.keep_existing,
         )
         print(
